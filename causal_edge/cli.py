@@ -127,6 +127,20 @@ def validate(strategy, verbose, config):
 
 
 @main.command()
+@click.argument("ticker")
+def discover(ticker):
+    """Discover causal parents for an asset via Abel API (requires ABEL_API_KEY)."""
+    try:
+        from causal_edge.plugins.abel.discover import discover_parents
+    except ImportError:
+        raise click.ClickException(
+            "Abel plugin not installed. See: causal_edge/plugins/AGENTS.md"
+        )
+    parents = discover_parents(ticker)
+    click.echo(parents)
+
+
+@main.command()
 @click.option("--config", default="strategies.yaml", help="Config file path")
 def status(config):
     """Show strategy status summary."""

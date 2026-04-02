@@ -24,10 +24,10 @@ class SMAEngine(StrategyEngine):
         prices = 100.0 * np.exp(np.cumsum(returns))
         dates = pd.bdate_range(end=pd.Timestamp.today(), periods=self.n_days)
 
-        fast_ma = pd.Series(prices).rolling(self.fast).mean().values
-        slow_ma = pd.Series(prices).rolling(self.slow).mean().values
+        fast_ma = pd.Series(prices).rolling(self.fast).mean().shift(1).values
+        slow_ma = pd.Series(prices).rolling(self.slow).mean().shift(1).values
         positions = np.where(fast_ma > slow_ma, 1.0, 0.0)
-        positions[:self.slow] = 0.0  # No signal until slow MA warms up
+        positions[:self.slow + 1] = 0.0  # +1 for shift; no signal until slow MA warms up
 
         return positions, dates, returns, prices
 

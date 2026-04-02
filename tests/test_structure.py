@@ -184,6 +184,25 @@ class TestPluginsOptional:
                         f"Fix: Use try/except ImportError for plugin imports."
                     )
 
+    def test_core_source_no_plugin_imports(self):
+        """Core source files must not import from plugins (except cli.py with try/except)."""
+        violations = []
+        core_dirs = [ROOT / "causal_edge" / d for d in ("engine", "dashboard", "validation")]
+        core_files = [ROOT / "causal_edge" / "config.py"]
+        for d in core_dirs:
+            if d.exists():
+                core_files.extend(f for f in d.rglob("*.py") if "__pycache__" not in str(f))
+        for f in core_files:
+            content = f.read_text()
+            if re.search(r"(?:from|import)\s+causal_edge\.plugins", content):
+                violations.append(str(f.relative_to(ROOT)))
+        assert not violations, (
+            f"Core files import from plugins:\n"
+            + "\n".join(f"  {v}" for v in violations)
+            + "\nFix: Plugins are optional. Core must not import them. "
+            + "Use try/except in cli.py only."
+        )
+
 
 # ── Test 10: Strategies standalone ───────────────────────────────
 

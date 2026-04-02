@@ -48,7 +48,9 @@ def run_one(strategy_cfg: dict) -> dict:
 
     positions, dates, returns, prices = engine.compute_signals()
 
-    # PnL = position * returns (position at T-1 applied to return at T)
+    # PnL: positions[t] * returns[t] is correct because the engine contract
+    # requires positions[t] to be decided using data through t-1 only.
+    # The engine is responsible for applying shift(1) to indicators.
     pnl = positions * returns
     # First day has no prior position signal
     pnl[0] = 0.0

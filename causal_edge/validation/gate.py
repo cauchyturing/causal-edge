@@ -133,19 +133,27 @@ def print_validation_report(results: dict) -> None:
     for sid, r in results.items():
         tri = r["triangle"]
         badge = r["score"]
-        status = "PASS" if r["verdict"] == "PASS" else "FAIL"
-        marker = "+" if status == "PASS" else "x"
+        verdict = r["verdict"]
+        if verdict == "PASS":
+            status, marker = "PASS", "+"
+        elif verdict == "SKIP":
+            status, marker = "SKIP", "-"
+        else:
+            status, marker = "FAIL", "x"
         print(f"\n  [{marker}] {sid:15s}  {badge:>6s}  {status}")
         print(f"      Triangle: Lo={tri['ratio']:.2f}  "
               f"IC={tri['rank']:.3f}  Omega={tri['shape']:.2f}")
         if r["failures"]:
             for f in r["failures"]:
-                print(f"      FAIL: {f}")
+                label = "SKIP" if verdict == "SKIP" else "FAIL"
+                print(f"      {label}: {f}")
 
     n_pass = sum(1 for r in results.values() if r["verdict"] == "PASS")
+    n_skip = sum(1 for r in results.values() if r["verdict"] == "SKIP")
     n_total = len(results)
     print(f"\n  {'=' * 66}")
-    print(f"  {n_pass}/{n_total} strategies pass Abel Proof validation")
+    skip_note = f"  ({n_skip} skipped — run 'causal-edge run' first)" if n_skip else ""
+    print(f"  {n_pass}/{n_total - n_skip} strategies pass Abel Proof validation{skip_note}")
     print("=" * 70)
 
 

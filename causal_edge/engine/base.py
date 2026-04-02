@@ -31,7 +31,10 @@ class StrategyEngine(ABC):
 
         Returns:
             Tuple of (positions, dates, returns, prices) where:
-                positions: np.ndarray of daily position sizes (0=flat, 1=long)
+                positions: np.ndarray of daily position sizes (0=flat, 1=long).
+                    IMPORTANT: positions[t] must be decided using only data through
+                    day t-1. Apply .shift(1) to any indicators before using them
+                    to determine positions. This prevents look-ahead bias.
                 dates: pd.DatetimeIndex of trading dates
                 returns: np.ndarray of daily asset returns
                 prices: np.ndarray of daily closing prices

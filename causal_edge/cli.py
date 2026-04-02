@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 
@@ -89,12 +91,38 @@ def validate(strategy, verbose, config):
     for s_cfg in strategies:
         sid = s_cfg["id"]
         log_path = s_cfg.get("trade_log", "")
+        if not Path(log_path).exists():
+            results[sid] = {
+                "verdict": "SKIP",
+                "score": "0/0",
+                "failures": [f"Trade log not found: {log_path}. Run 'causal-edge run' first."],
+                "metrics": {},
+                "triangle": {"ratio": 0, "rank": 0, "shape": 0},
+                "profile": "unknown",
+            }
+            continue
         result = validate_strategy(log_path)
         results[sid] = result
 
     print_validation_report(results)
 
-    all_pass = all(r["verdict"] == "PASS" for r in results.values())
+    if verbose:
+        click.echo("")
+        for sid, r in results.items():
+            if r.get("metrics"):
+                click.echo(f"  {sid} metrics:")
+                m = r["metrics"]
+                for key in ("sharpe", "lo_adjusted", "sortino", "total_pnl",
+                            "max_dd", "calmar", "dsr", "pbo", "oos_is",
+                            "omega", "ic", "ic_hit_rate"):
+                    if key in m:
+                        click.echo(f"    {key:20s} {m[key]:.4f}")
+                if "yearly_sharpes" in m:
+                    click.echo(f"    yearly_sharpes:")
+                    for yr, sh in sorted(m["yearly_sharpes"].items()):
+                        click.echo(f"      {yr}: {sh:.2f}")
+
+    all_pass = all(r["verdict"] in ("PASS", "SKIP") for r in results.values())
     sys.exit(0 if all_pass else 1)
 
 

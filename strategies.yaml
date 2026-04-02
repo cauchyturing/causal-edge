@@ -1,0 +1,23 @@
+# causal-edge strategy configuration
+# See docs/add-strategy.md for how to add strategies.
+#
+# Required fields per strategy:
+#   id:        unique snake_case identifier
+#   name:      human-readable display name
+#   asset:     target asset ticker (ETH, META, AAPL, etc.)
+#   color:     6-digit hex color for charts (#FF2D55)
+#   engine:    Python module path (strategies.my_strategy.engine)
+#   trade_log: path to trade log CSV
+#
+# Optional fields:
+#   tab_label: short label for dashboard tab (2-5 chars)
+#   retrain:   retrain schedule (monday, daily, etc.)
+#   badge:     validation badge ("15/15")
+#   parents:   causal parent list (Abel plugin)
+
+settings:
+  capital: 100000
+  port: 8088
+  theme: dark
+
+strategies: []

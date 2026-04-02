@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+.env
+*.csv
+data/
+dashboard.html
+.ruff_cache/

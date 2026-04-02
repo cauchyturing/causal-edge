@@ -28,20 +28,25 @@ def scaffold_project(name: str) -> Path:
     # Create directory structure
     root.mkdir()
     (root / "strategies" / "sma_crossover").mkdir(parents=True)
+    (root / "strategies" / "momentum_ml").mkdir(parents=True)
     (root / "data").mkdir()
+    (root / "data" / ".gitkeep").write_text("")
 
-    # Copy SMA example engine
-    example_src = Path(__file__).parent.parent / "examples" / "sma_crossover" / "engine.py"
-    if example_src.exists():
-        shutil.copy2(example_src, root / "strategies" / "sma_crossover" / "engine.py")
-    else:
-        # Fallback: write minimal engine inline
-        (root / "strategies" / "sma_crossover" / "engine.py").write_text(
-            _SMA_ENGINE_SRC
-        )
+    # Copy example engines
+    examples_dir = Path(__file__).parent.parent / "examples"
+    for name_dir in ("sma_crossover", "momentum_ml"):
+        src = examples_dir / name_dir / "engine.py"
+        dst = root / "strategies" / name_dir / "engine.py"
+        if src.exists():
+            shutil.copy2(src, dst)
+
+    # Fallback if examples not found (pip install without source tree)
+    if not (root / "strategies" / "sma_crossover" / "engine.py").exists():
+        (root / "strategies" / "sma_crossover" / "engine.py").write_text(_SMA_ENGINE_SRC)
 
     (root / "strategies" / "__init__.py").write_text("")
     (root / "strategies" / "sma_crossover" / "__init__.py").write_text("")
+    (root / "strategies" / "momentum_ml" / "__init__.py").write_text("")
 
     # strategies.yaml
     (root / "strategies.yaml").write_text(_STRATEGIES_YAML)
@@ -74,6 +79,13 @@ strategies:
     color: "#0A84FF"
     engine: strategies.sma_crossover.engine
     trade_log: "data/trade_log_sma_crossover.csv"
+
+  - id: momentum_ml
+    name: "Momentum ML"
+    asset: DEMO
+    color: "#FF9500"
+    engine: strategies.momentum_ml.engine
+    trade_log: "data/trade_log_momentum_ml.csv"
 """
 
 _ENV_EXAMPLE = """\

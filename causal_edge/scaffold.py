@@ -1,0 +1,152 @@
+"""Project scaffolding for `causal-edge init`."""
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+
+def scaffold_project(name: str) -> Path:
+    """Create a new causal-edge project directory.
+
+    Args:
+        name: Project directory name (created in current working directory)
+
+    Returns:
+        Path to created directory
+
+    Raises:
+        FileExistsError: If directory already exists
+    """
+    root = Path(name)
+    if root.exists():
+        raise FileExistsError(
+            f"Directory '{name}' already exists. "
+            f"Choose a different name or remove the existing directory."
+        )
+
+    # Create directory structure
+    root.mkdir()
+    (root / "strategies" / "sma_crossover").mkdir(parents=True)
+    (root / "data").mkdir()
+
+    # Copy SMA example engine
+    example_src = Path(__file__).parent.parent / "examples" / "sma_crossover" / "engine.py"
+    if example_src.exists():
+        shutil.copy2(example_src, root / "strategies" / "sma_crossover" / "engine.py")
+    else:
+        # Fallback: write minimal engine inline
+        (root / "strategies" / "sma_crossover" / "engine.py").write_text(
+            _SMA_ENGINE_SRC
+        )
+
+    (root / "strategies" / "__init__.py").write_text("")
+    (root / "strategies" / "sma_crossover" / "__init__.py").write_text("")
+
+    # strategies.yaml
+    (root / "strategies.yaml").write_text(_STRATEGIES_YAML)
+
+    # .env.example
+    (root / ".env.example").write_text(_ENV_EXAMPLE)
+
+    # CLAUDE.md
+    (root / "CLAUDE.md").write_text(_CLAUDE_MD)
+
+    # AGENTS.md
+    (root / "AGENTS.md").write_text(_AGENTS_MD)
+
+    return root
+
+
+_STRATEGIES_YAML = """\
+# causal-edge project configuration
+# Run: causal-edge run && causal-edge dashboard && causal-edge validate
+
+settings:
+  capital: 100000
+  port: 8080
+  theme: dark
+
+strategies:
+  - id: sma_crossover
+    name: "SMA Crossover"
+    asset: DEMO
+    color: "#0A84FF"
+    engine: strategies.sma_crossover.engine
+    trade_log: "data/trade_log_sma_crossover.csv"
+"""
+
+_ENV_EXAMPLE = """\
+# Abel CAP API key (optional — for causal discovery)
+# Get one at https://abel.ai
+# ABEL_API_KEY=your_key_here
+"""
+
+_CLAUDE_MD = """\
+# CLAUDE.md — project harness
+
+## Constraints
+- strategies.yaml is the single source of truth
+- All features must use shift(1) — zero look-ahead tolerance
+- strategies/ must not import causal_edge internals (except engine base)
+
+## Commands
+causal-edge run         # run strategies, write trade logs
+causal-edge dashboard   # generate dashboard.html
+causal-edge validate    # Abel Proof 15-test validation
+causal-edge status      # show strategy summary
+"""
+
+_AGENTS_MD = """\
+# Project — Agent Entry Point
+
+## I want to...
+
+### Run everything
+    causal-edge run && causal-edge dashboard && causal-edge validate
+
+### Add a strategy
+1. Create strategies/my_strategy/engine.py implementing StrategyEngine
+2. Add entry to strategies.yaml
+3. Run: causal-edge run --strategy my_strategy
+4. Run: causal-edge validate --strategy my_strategy
+
+### Fix a failing validation
+    causal-edge validate --verbose
+See the failure→fix mapping in the causal-edge docs.
+
+### View the dashboard
+    causal-edge dashboard && open dashboard.html
+"""
+
+_SMA_ENGINE_SRC = """\
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+from causal_edge.engine.base import StrategyEngine
+
+
+class SMAEngine(StrategyEngine):
+    def __init__(self, context=None, n_days=500):
+        super().__init__(context=context)
+        self.n_days = n_days
+        self.fast = 10
+        self.slow = 30
+
+    def compute_signals(self):
+        rng = np.random.default_rng(42)
+        returns = rng.normal(0.0005, 0.02, self.n_days)
+        prices = 100.0 * np.exp(np.cumsum(returns))
+        dates = pd.bdate_range(end=pd.Timestamp.today(), periods=self.n_days)
+        fast_ma = pd.Series(prices).rolling(self.fast).mean().shift(1).values
+        slow_ma = pd.Series(prices).rolling(self.slow).mean().shift(1).values
+        positions = np.where(fast_ma > slow_ma, 1.0, 0.0)
+        positions[:self.slow + 1] = 0.0
+        return positions, dates, returns, prices
+
+    def get_latest_signal(self):
+        positions, dates, _, prices = self.compute_signals()
+        return {"position": float(positions[-1]), "date": str(dates[-1].date())}
+"""

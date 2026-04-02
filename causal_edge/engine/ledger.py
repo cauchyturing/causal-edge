@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 
@@ -16,6 +17,30 @@ def read_trade_log(path: str | Path) -> pd.DataFrame:
     return df
 
 
-def write_trade_log(df: pd.DataFrame, path: str | Path) -> None:
-    """Write a trade log CSV. Ensures required columns exist."""
-    raise NotImplementedError("ledger.write_trade_log coming in Phase 2.")
+def write_trade_log(
+    dates: pd.DatetimeIndex,
+    pnl: np.ndarray,
+    positions: np.ndarray,
+    path: str | Path,
+    source: str = "backfill",
+) -> None:
+    """Write a trade log CSV from strategy output arrays.
+
+    Args:
+        dates: Trading dates
+        pnl: Daily PnL (position * returns)
+        positions: Daily position sizes
+        path: Output CSV path
+        source: "backfill" or "live"
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    df = pd.DataFrame({
+        "date": dates,
+        "pnl": pnl,
+        "position": positions,
+        "cum_pnl": np.cumsum(pnl),
+        "source": source,
+    })
+    df.to_csv(path, index=False)

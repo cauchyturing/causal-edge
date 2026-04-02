@@ -2,11 +2,137 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>causal-edge dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #1a1a2e; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        .header { background: #16213e; padding: 16px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 20px; font-weight: 600; color: #fff; }
+        .header .meta { font-size: 12px; color: #888; }
+        .tabs { display: flex; gap: 4px; padding: 8px 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
+        .tab { padding: 8px 16px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 13px; color: #aaa; background: transparent; border: none; }
+        .tab:hover { color: #fff; background: #1a1a2e; }
+        .tab.active { color: #fff; background: #1a1a2e; border-bottom: 2px solid #0a84ff; }
+        .content { padding: 24px; max-width: 1200px; margin: 0 auto; }
+        .panel { display: none; }
+        .panel.active { display: block; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #0f3460; font-size: 12px; color: #888; text-transform: uppercase; }
+        td { padding: 10px 12px; border-bottom: 1px solid #1e2a4a; font-size: 14px; }
+        .pnl-pos { color: #30d158; }
+        .pnl-neg { color: #ff453a; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+        .badge-pass { background: #30d15820; color: #30d158; }
+        .badge-fail { background: #ff453a20; color: #ff453a; }
+        .badge-none { background: #88888820; color: #888; }
+        .chart-container { margin-top: 16px; background: #16213e; border-radius: 8px; padding: 16px; }
+        .strategy-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .strategy-header .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .strategy-header h2 { font-size: 18px; }
+        .no-data { text-align: center; padding: 60px; color: #666; }
+    </style>
 </head>
 <body>
-    <!-- Phase 2: overview + strategy tabs rendered here -->
-    <h1>causal-edge dashboard</h1>
-    <p>Dashboard generation coming in Phase 2.</p>
+    <div class="header">
+        <h1>causal-edge</h1>
+        <div class="meta">Generated {{ generated_at }}</div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" onclick="showTab('overview')">Overview</button>
+        {% for s in strategies %}
+        <button class="tab" onclick="showTab('{{ s.id }}')" style="border-left: 3px solid {{ s.color }}">
+            {{ s.name }}
+        </button>
+        {% endfor %}
+    </div>
+
+    <div class="content">
+        <!-- Overview Panel -->
+        <div id="panel-overview" class="panel active">
+            {% if strategies %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Strategy</th>
+                        <th>Asset</th>
+                        <th>Sharpe</th>
+                        <th>PnL</th>
+                        <th>MaxDD</th>
+                        <th>Win Rate</th>
+                        <th>Days</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in strategies %}
+                    <tr>
+                        <td>
+                            <span style="color: {{ s.color }}">&#9679;</span>
+                            {{ s.name }}
+                        </td>
+                        <td>{{ s.asset }}</td>
+                        {% if s.has_data %}
+                        <td>{{ "%.2f"|format(s.metrics.sharpe) }}</td>
+                        <td class="{{ 'pnl-pos' if s.metrics.cum_pnl > 0 else 'pnl-neg' }}">
+                            {{ fmt_pnl_pct(s.metrics.cum_pnl) }}
+                        </td>
+                        <td class="pnl-neg">-{{ "%.1f"|format(s.metrics.max_dd * 100) }}%</td>
+                        <td>{{ "%.0f"|format(s.metrics.win_rate * 100) }}%</td>
+                        <td>{{ s.metrics.n_days }}</td>
+                        {% else %}
+                        <td colspan="5" style="color: #666;">No data — run <code>causal-edge run</code></td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="no-data">
+                No strategies configured. Add strategies to <code>strategies.yaml</code>.
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Per-strategy Panels -->
+        {% for s in strategies %}
+        <div id="panel-{{ s.id }}" class="panel">
+            <div class="strategy-header">
+                <div class="dot" style="background: {{ s.color }}"></div>
+                <h2>{{ s.name }}</h2>
+                <span style="color: #888;">{{ s.asset }}</span>
+            </div>
+
+            {% if s.has_data %}
+            <div class="chart-container">
+                <div id="equity-{{ s.id }}"></div>
+            </div>
+            <div class="chart-container" style="margin-top: 12px;">
+                <div id="position-{{ s.id }}"></div>
+            </div>
+            {% else %}
+            <div class="no-data">No trade log data. Run <code>causal-edge run --strategy {{ s.id }}</code></div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <script>
+        function showTab(id) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('panel-' + id).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Render Plotly charts
+        {% for s in strategies %}
+        {% if s.has_data %}
+        Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json }}.data, {{ s.equity_json }}.layout, {responsive: true});
+        Plotly.newPlot('position-{{ s.id }}', {{ s.position_json }}.data, {{ s.position_json }}.layout, {responsive: true});
+        {% endif %}
+        {% endfor %}
+    </script>
 </body>
 </html>

@@ -1,14 +1,14 @@
 # Strategies
 
-Strategy engine implementations. Each is a directory with `engine.py` implementing
+Strategy engine implementations. Each is a directory with an engine.py implementing
 `StrategyEngine` from `causal_edge/engine/base.py`.
 
 ## I want to...
 
 ### Add a strategy
-1. Create `strategies/my_strategy/` directory
-2. Create `strategies/my_strategy/__init__.py` (empty)
-3. Create `strategies/my_strategy/engine.py` implementing `StrategyEngine`
+1. Create strategies/my_strategy/ directory
+2. Create strategies/my_strategy/__init__.py (empty)
+3. Create strategies/my_strategy/engine.py implementing `StrategyEngine`
 4. Add entry to root `strategies.yaml` with `engine: strategies.my_strategy.engine`
 5. `make test` — `TestEngineModuleImportable` verifies import works
 6. `causal-edge validate` — runs Abel Proof 15-test gate

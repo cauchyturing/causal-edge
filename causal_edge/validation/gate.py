@@ -1,0 +1,159 @@
+"""Strategy admission gate — validate before adding to production.
+
+Usage:
+    from causal_edge.validation import validate_strategy
+    result = validate_strategy("strategies/my_strategy/engine.py",
+                               trade_log="data/trade_log.csv")
+    print(result["verdict"])   # PASS / FAIL
+    print(result["failures"])  # list of failure messages
+    print(result["triangle"])  # {lo, ic, omega} scores
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from causal_edge.validation.metrics import (
+    compute_all_metrics,
+    detect_profile,
+    load_profile,
+    validate,
+)
+
+
+def validate_strategy(
+    trade_log: str | Path,
+    profile: str | None = None,
+    positions_col: str = "position",
+) -> dict:
+    """Run full Abel Proof validation on a strategy's trade log.
+
+    Args:
+        trade_log: Path to trade_log CSV (must have 'date', 'pnl' columns).
+        profile: Profile name ('crypto_daily', 'equity_daily', 'hft')
+                 or path to YAML. Auto-detected if None.
+        positions_col: Column name for positions (default 'position').
+
+    Returns dict with:
+        verdict: "PASS" or "FAIL"
+        score: "N/M" (e.g. "14/15")
+        failures: list of failure message strings
+        metrics: full metrics dict
+        triangle: {ratio, rank, shape} — the three leverage-invariant dims
+        profile: profile name used
+    """
+    df = pd.read_csv(trade_log, parse_dates=["date"])
+    if len(df) < 30:
+        return {
+            "verdict": "FAIL",
+            "score": "0/0",
+            "failures": [f"Insufficient data: {len(df)} rows (need 30+)"],
+            "metrics": {},
+            "triangle": {"ratio": 0, "rank": 0, "shape": 0},
+            "profile": "unknown",
+        }
+
+    pnl = df["pnl"].values.astype(float)
+    dates = pd.DatetimeIndex(df["date"])
+    positions = (df[positions_col].values.astype(float)
+                 if positions_col in df.columns else None)
+
+    # Auto-detect or load profile
+    if profile is None:
+        profile_name = detect_profile(pnl, dates)
+    else:
+        profile_name = profile
+    prof = load_profile(profile_name)
+
+    # Compute all metrics
+    metrics = compute_all_metrics(pnl, dates, positions)
+
+    # Run validation gate
+    passed, failures = validate(metrics, prof)
+
+    # Extract triangle
+    mt = prof.get("metric_triangle", {})
+    opt_key = {"lo_adjusted_sharpe": "lo_adjusted",
+               "sharpe": "sharpe"}.get(mt.get("optimize", "lo_adjusted_sharpe"),
+                                       "lo_adjusted")
+    triangle = {
+        "ratio": metrics.get(opt_key, 0),
+        "rank": metrics.get("ic", 0),
+        "shape": metrics.get("omega", 0),
+    }
+
+    # Count tests
+    total_tests = len(failures) + _count_passed(metrics, prof)
+
+    return {
+        "verdict": "PASS" if passed else "FAIL",
+        "score": f"{total_tests - len(failures)}/{total_tests}",
+        "failures": failures,
+        "metrics": metrics,
+        "triangle": triangle,
+        "profile": profile_name,
+    }
+
+
+def validate_all_strategies(config_path: str | Path | None = None) -> dict:
+    """Validate all strategies in strategies.yaml.
+
+    Returns dict mapping strategy_id → validation result.
+    """
+    from causal_edge.config import load_config
+
+    cfg = load_config(config_path)
+    results = {}
+    for s_cfg in cfg["strategies"]:
+        sid = s_cfg["id"]
+        log_path = s_cfg.get("trade_log", "")
+        if not Path(log_path).exists():
+            results[sid] = {
+                "verdict": "SKIP",
+                "score": "0/0",
+                "failures": [f"Trade log not found: {log_path}"],
+                "metrics": {},
+                "triangle": {"ratio": 0, "rank": 0, "shape": 0},
+                "profile": "unknown",
+            }
+            continue
+        results[sid] = validate_strategy(log_path)
+    return results
+
+
+def print_validation_report(results: dict) -> None:
+    """Print a formatted validation report."""
+    print("=" * 70)
+    print("ABEL PROOF VALIDATION REPORT")
+    print("=" * 70)
+
+    for sid, r in results.items():
+        tri = r["triangle"]
+        badge = r["score"]
+        status = "PASS" if r["verdict"] == "PASS" else "FAIL"
+        marker = "+" if status == "PASS" else "x"
+        print(f"\n  [{marker}] {sid:15s}  {badge:>6s}  {status}")
+        print(f"      Triangle: Lo={tri['ratio']:.2f}  "
+              f"IC={tri['rank']:.3f}  Omega={tri['shape']:.2f}")
+        if r["failures"]:
+            for f in r["failures"]:
+                print(f"      FAIL: {f}")
+
+    n_pass = sum(1 for r in results.values() if r["verdict"] == "PASS")
+    n_total = len(results)
+    print(f"\n  {'=' * 66}")
+    print(f"  {n_pass}/{n_total} strategies pass Abel Proof validation")
+    print("=" * 70)
+
+
+def _count_passed(metrics: dict, profile: dict) -> int:
+    """Count total tests that could be run."""
+    count = 9  # base: DSR, PBO, OOS/IS, NegRoll, LossYrs, Lo, Omega, MaxDD, PnLfloor
+    count += 1  # Sharpe/Lo ratio
+    count += 1  # Bootstrap
+    if metrics.get("ic", 0) != 0:
+        count += 2  # IC min + IC stability
+    return count

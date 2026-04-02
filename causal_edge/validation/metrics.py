@@ -1,0 +1,368 @@
+"""Abel Proof — Core metrics engine.
+
+Computes all strategy metrics from a PnL array. Used by gate.py for
+strategy admission validation. Zero external dependencies beyond
+pandas, numpy, scipy.
+
+Metric triangle (leverage-invariant, orthogonal):
+  - Ratio: Lo-adjusted Sharpe (crypto) or raw Sharpe (equity)
+  - Rank:  IC (Spearman rank correlation of position vs return)
+  - Shape: Omega (sum of gains / sum of |losses|)
+
+Anti-gaming:
+  - Clipping inflates Sharpe but tanks Omega (catches return clipping)
+  - Serial correlation inflates Sharpe but not Lo (catches autocorr gaming)
+  - MaxDD is absolute gate only (scales with leverage, not in triangle)
+"""
+
+import os
+from itertools import combinations
+
+import numpy as np
+import pandas as pd
+from scipy import stats as sp_stats
+
+PROFILES_DIR = os.path.join(os.path.dirname(__file__), "profiles")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Profile Loading
+# ═══════════════════════════════════════════════════════════════════
+
+def load_profile(name_or_path: str) -> dict:
+    """Load a metric profile by name ('crypto_daily') or file path."""
+    if os.path.exists(name_or_path):
+        path = name_or_path
+    else:
+        path = os.path.join(PROFILES_DIR, f"{name_or_path}.yaml")
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                f"Profile not found: {name_or_path} (searched {path})")
+    import yaml
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def detect_profile(pnl: np.ndarray, dates: pd.DatetimeIndex) -> str:
+    """Auto-detect profile from data characteristics."""
+    if len(dates) > 1:
+        gaps = pd.Series(dates).diff().dropna()
+        median_gap = gaps.median()
+        if median_gap < pd.Timedelta(hours=1):
+            return "hft"
+    ann_vol = np.std(pnl, ddof=1) * np.sqrt(252)
+    if ann_vol > 0.60:
+        return "crypto_daily"
+    return "equity_daily"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Metrics Computation
+# ═══════════════════════════════════════════════════════════════════
+
+def compute_all_metrics(pnl: np.ndarray, dates: pd.DatetimeIndex,
+                        positions: np.ndarray = None) -> dict:
+    """Compute all strategy metrics from a PnL array.
+
+    Args:
+        pnl: daily log-return PnL array
+        dates: DatetimeIndex aligned with pnl
+        positions: optional position array for IC computation
+
+    Returns dict with all metrics needed for validation gate.
+    """
+    T = len(pnl)
+    if T < 30:
+        raise ValueError(f"Need at least 30 days, got {T}")
+
+    pnl = np.nan_to_num(pnl, nan=0.0, posinf=0.0, neginf=0.0)
+    if positions is not None:
+        positions = np.nan_to_num(positions, nan=0.0, posinf=0.0, neginf=0.0)
+
+    cum = np.cumsum(pnl)
+    dd = cum - np.maximum.accumulate(cum)
+    std = np.std(pnl, ddof=1)
+
+    sharpe = float(np.mean(pnl) / std * np.sqrt(252)) if std > 0 else 0
+    sortino = _sortino(pnl)
+    max_dd = float(np.min(dd))
+    calmar = float(cum[-1] / abs(max_dd)) if max_dd != 0 else 999
+    total_pnl = float(cum[-1])
+
+    # Lo-adjusted Sharpe (serial correlation correction)
+    rho = [pd.Series(pnl).autocorr(lag=k) for k in range(1, 11)]
+    rho = [r if not np.isnan(r) else 0 for r in rho]
+    cf = 1 + 2 * sum(rho[k] * (1 - (k + 1) / 252) for k in range(10))
+    lo_adjusted = sharpe * np.sqrt(1 / cf) if cf > 0 else sharpe
+
+    dsr = _dsr(pnl, T, K=300)
+    pbo, oos_sharpes = _cpcv(pnl, n_groups=16)
+
+    # OOS/IS (mechanical 50/50 split)
+    mid = T // 2
+    is_sh = _sharpe(pnl[:mid])
+    oos_sh = _sharpe(pnl[mid:])
+    oos_is = oos_sh / is_sh if is_sh != 0 else 0
+
+    # Year-by-year stability
+    loss_years = 0
+    yearly_sharpes = {}
+    for yr in sorted(dates.year.unique()):
+        ysh = _sharpe(pnl[dates.year == yr])
+        yearly_sharpes[yr] = ysh
+        if ysh < 0:
+            loss_years += 1
+
+    # Rolling 252d Sharpe
+    roll_sharpes = [_sharpe(pnl[i - 252:i]) for i in range(252, T, 63)]
+    neg_roll_frac = float(np.mean(
+        np.array(roll_sharpes) < 0)) if roll_sharpes else 0
+
+    # Omega (gain/loss asymmetry — catches clipping)
+    active = pnl[np.abs(pnl) > 1e-10]
+    gains = active[active > 0]
+    losses = active[active < 0]
+    omega = (float(np.sum(gains) / abs(np.sum(losses)))
+             if len(losses) > 0 and np.sum(losses) != 0 else 999)
+
+    # Tail risk
+    skew = float(sp_stats.skew(pnl))
+    hill_alpha = _hill_estimator(pnl)
+    var_5 = float(np.percentile(pnl, 5))
+    cvar_5 = float(np.mean(pnl[pnl <= var_5])) if np.any(pnl <= var_5) else var_5
+    cvar_var_ratio = abs(cvar_5 / var_5) if var_5 != 0 else 1.0
+
+    sharpe_lo_ratio = sharpe / lo_adjusted if lo_adjusted > 0 else 999
+    bootstrap_p = _bootstrap_sharpe(pnl, n_boot=1000)
+
+    # IC (Information Coefficient)
+    ic, ic_hit_rate, ic_stability, ic_monthly_mean = 0.0, 0.0, 0.0, 0.0
+    if positions is not None and len(positions) == T:
+        ic, ic_hit_rate, ic_stability, ic_monthly_mean = _compute_ic(
+            pnl, positions, dates)
+
+    active_days = (int(np.sum(np.abs(positions) > 0.01))
+                   if positions is not None
+                   else int(np.sum(np.abs(pnl) > 1e-10)))
+
+    return {
+        "sharpe": sharpe, "lo_adjusted": lo_adjusted, "sortino": sortino,
+        "total_pnl": total_pnl, "max_dd": max_dd, "calmar": calmar,
+        "dsr": dsr, "pbo": pbo, "oos_is": oos_is,
+        "loss_years": loss_years, "neg_roll_frac": neg_roll_frac,
+        "omega": omega, "skew": skew, "hill_alpha": hill_alpha,
+        "cvar_var_ratio": cvar_var_ratio,
+        "sharpe_lo_ratio": sharpe_lo_ratio,
+        "bootstrap_p": bootstrap_p,
+        "ic": ic, "ic_hit_rate": ic_hit_rate,
+        "ic_stability": ic_stability, "ic_monthly_mean": ic_monthly_mean,
+        "active_days": active_days, "total_days": T,
+        "yearly_sharpes": yearly_sharpes,
+        "is_sharpe": is_sh, "oos_sharpe": oos_sh,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Validation
+# ═══════════════════════════════════════════════════════════════════
+
+def validate(metrics: dict, profile: dict) -> tuple[bool, list[str]]:
+    """Run validation gate. Returns (passed, list_of_failures)."""
+    v = profile.get("validation", {})
+    ag = profile.get("anti_gaming", {})
+    failures = []
+
+    if metrics["dsr"] < v.get("dsr_min", 0.90):
+        failures.append(f"T6 DSR {metrics['dsr']:.1%} < {v['dsr_min']:.0%}")
+    if metrics["pbo"] > v.get("pbo_max", 0.10):
+        failures.append(f"T7 PBO {metrics['pbo']:.1%} > {v['pbo_max']:.0%}")
+    if abs(metrics["oos_is"]) < v.get("oos_is_min", 0.50):
+        failures.append(
+            f"T12 OOS/IS {metrics['oos_is']:.2f} < {v['oos_is_min']}")
+    if metrics["neg_roll_frac"] > v.get("neg_roll_frac_max", 0.15):
+        failures.append(
+            f"T13 NegRoll {metrics['neg_roll_frac']:.0%} > "
+            f"{v['neg_roll_frac_max']:.0%}")
+    if metrics["loss_years"] > v.get("max_loss_years", 2):
+        failures.append(
+            f"T14 LossYrs {metrics['loss_years']} > {v['max_loss_years']}")
+    if metrics["lo_adjusted"] < v.get("lo_adjusted_min", 1.0):
+        failures.append(
+            f"T15 Lo {metrics['lo_adjusted']:.2f} < {v['lo_adjusted_min']}")
+    if metrics["omega"] < v.get("omega_min", 1.0):
+        failures.append(
+            f"T15 Omega {metrics['omega']:.2f} < {v['omega_min']}")
+    if metrics["max_dd"] < v.get("max_dd", -0.20):
+        failures.append(
+            f"T15 MaxDD {metrics['max_dd']*100:.1f}% < {v['max_dd']*100:.0f}%")
+    if metrics["total_pnl"] < ag.get("pnl_floor", 1.0):
+        failures.append(
+            f"PnL floor {metrics['total_pnl']*100:+.1f}% < "
+            f"+{ag['pnl_floor']*100:.0f}%")
+    if (metrics["sharpe"] > 0 and metrics["lo_adjusted"] > 0
+            and metrics["sharpe_lo_ratio"] > ag.get("sharpe_lo_ratio_max", 2.5)):
+        failures.append(
+            f"Sharpe/Lo {metrics['sharpe_lo_ratio']:.1f} > "
+            f"{ag['sharpe_lo_ratio_max']}")
+    if metrics["ic"] != 0 and metrics["ic"] < ag.get("ic_min", 0.02):
+        failures.append(f"IC {metrics['ic']:.3f} < {ag['ic_min']}")
+    if (metrics["ic_stability"] != 0
+            and metrics["ic_stability"] < ag.get("ic_stability_min", 0.50)):
+        failures.append(
+            f"IC stab {metrics['ic_stability']:.0%} < "
+            f"{ag['ic_stability_min']:.0%}")
+    if metrics["bootstrap_p"] > 0.05:
+        failures.append(f"Bootstrap p={metrics['bootstrap_p']:.3f} > 0.05")
+
+    return len(failures) == 0, failures
+
+
+def decide_keep_discard(current: dict, baseline: dict,
+                        profile: dict) -> str:
+    """Metric triangle KEEP/DISCARD decision.
+
+    Three leverage-invariant, orthogonal dimensions:
+      Ratio (Lo-adj or Sharpe) — optimized, must improve
+      Rank  (IC)               — guardrail, must not degrade
+      Shape (Omega)            — guardrail, catches clipping
+
+    MaxDD is an absolute gate (not relative — scales with leverage).
+    """
+    mt = profile.get("metric_triangle", {})
+    ag = profile.get("anti_gaming", {})
+
+    opt_key = {"lo_adjusted_sharpe": "lo_adjusted",
+               "sharpe": "sharpe"}.get(mt.get("optimize", "lo_adjusted_sharpe"),
+                                       "lo_adjusted")
+    if current.get(opt_key, 0) <= baseline.get(opt_key, 0):
+        return "DISCARD"
+
+    for guard in mt.get("guardrails", []):
+        key = {"raw_sharpe": "sharpe", "ic": "ic", "omega": "omega",
+               "total_pnl": "total_pnl"}.get(guard["metric"],
+                                               guard["metric"])
+        tol = guard.get("tolerance", 0)
+        if key == "total_pnl" and baseline.get(key, 0) > 0:
+            if current.get(key, 0) < baseline[key] * (1 - tol):
+                return "DISCARD"
+        else:
+            if current.get(key, 0) < baseline.get(key, 0) - tol:
+                return "DISCARD"
+
+    if current.get("max_dd", 0) < ag.get("max_dd_gate", -0.25):
+        return "DISCARD"
+
+    return "KEEP"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Private helpers
+# ═══════════════════════════════════════════════════════════════════
+
+def _sharpe(pnl):
+    s = np.std(pnl, ddof=1)
+    return float(np.mean(pnl) / s * np.sqrt(252)) if s > 0 else 0
+
+
+def _sortino(pnl):
+    down = pnl[pnl < 0]
+    if len(down) < 2:
+        return 0.0
+    ds = np.std(down, ddof=1)
+    return float(np.mean(pnl) / ds * np.sqrt(252)) if ds > 1e-10 else 0.0
+
+
+def _dsr(pnl, T, K=300):
+    """Deflated Sharpe Ratio (Bailey & Lopez de Prado 2014)."""
+    std = np.std(pnl, ddof=1)
+    if std == 0:
+        return 0
+    sr_d = np.mean(pnl) / std
+    skew = float(sp_stats.skew(pnl))
+    ekurt = float(sp_stats.kurtosis(pnl))
+    gamma = 0.5772
+    z1 = sp_stats.norm.ppf(1 - 1 / K)
+    z2 = sp_stats.norm.ppf(1 - 1 / (K * np.e))
+    emax = ((1 - gamma) * z1 + gamma * z2) / np.sqrt(T)
+    var_sr = (1 / T) * (1 - skew * sr_d + (ekurt / 4) * sr_d ** 2)
+    return float(sp_stats.norm.cdf(
+        (sr_d - emax) / np.sqrt(max(var_sr, 1e-20))))
+
+
+def _cpcv(pnl, n_groups=16):
+    """PnL-path CPCV. Returns (PBO, oos_sharpes)."""
+    T = len(pnl)
+    while n_groups > 4 and T // n_groups < 20:
+        n_groups -= 2
+    if T // n_groups < 10:
+        return 0.0, []
+    gs = T // n_groups
+    gst = [j * gs for j in range(n_groups)]
+    gen = [min((j + 1) * gs, T) for j in range(n_groups)]
+    gen[-1] = T
+    oos_sharpes = []
+    for tg in combinations(range(n_groups), 2):
+        tm = np.zeros(T, dtype=bool)
+        for g in tg:
+            tm[gst[g]:gen[g]] = True
+        o = pnl[tm]
+        s = np.std(o, ddof=1)
+        oos_sharpes.append(np.mean(o) / s * np.sqrt(252) if s > 0 else 0)
+    pbo = float(np.mean(np.array(oos_sharpes) <= 0))
+    return pbo, oos_sharpes
+
+
+def _hill_estimator(pnl, quantile=0.05):
+    """Hill tail index estimator for the lower tail."""
+    losses = -pnl[pnl < 0]
+    if len(losses) < 20:
+        return 4.0
+    losses_sorted = np.sort(losses)[::-1]
+    k = max(20, int(len(losses) * quantile))
+    k = min(k, len(losses_sorted) - 1)
+    threshold = losses_sorted[k]
+    if threshold <= 0:
+        return 4.0
+    log_excesses = np.log(losses_sorted[:k] / threshold)
+    alpha = k / np.sum(log_excesses) if np.sum(log_excesses) > 0 else 4.0
+    return float(alpha)
+
+
+def _bootstrap_sharpe(pnl, n_boot=1000):
+    """Bootstrap p-value for Sharpe > 0."""
+    rng = np.random.RandomState(42)
+    T = len(pnl)
+    boot = [_sharpe(rng.choice(pnl, size=T, replace=True))
+            for _ in range(n_boot)]
+    return float(np.mean(np.array(boot) <= 0))
+
+
+def _compute_ic(pnl, positions, dates):
+    """Compute IC (Spearman) and monthly stability."""
+    active_mask = np.abs(positions) > 0.01
+    if active_mask.sum() < 30:
+        return 0.0, 0.0, 0.0, 0.0
+
+    ap, al = positions[active_mask], pnl[active_mask]
+    if np.std(ap) < 1e-10 or np.std(al) < 1e-10:
+        return 0.0, float(np.mean(np.sign(ap) == np.sign(al))), 0.0, 0.0
+
+    ic = float(sp_stats.spearmanr(ap, al)[0])
+    if np.isnan(ic):
+        ic = 0.0
+    hit_rate = float(np.mean(np.sign(ap) == np.sign(al)))
+
+    ad = dates[active_mask]
+    monthly_ics = []
+    for ym in sorted(set(zip(ad.year, ad.month))):
+        m = (ad.year == ym[0]) & (ad.month == ym[1])
+        if m.sum() > 5:
+            mp, ml = ap[m], al[m]
+            if np.std(mp) > 1e-10 and np.std(ml) > 1e-10:
+                mic = float(sp_stats.spearmanr(mp, ml)[0])
+                if not np.isnan(mic):
+                    monthly_ics.append(mic)
+
+    stability = float(np.mean(np.array(monthly_ics) > 0)) if monthly_ics else 0
+    monthly_mean = float(np.mean(monthly_ics)) if monthly_ics else 0
+    return ic, hit_rate, stability, monthly_mean

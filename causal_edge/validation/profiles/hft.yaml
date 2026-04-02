@@ -1,0 +1,38 @@
+# Abel Proof profile: HFT (High-Frequency Trading)
+# For intraday/tick-level strategies.
+# Median inter-row gap < 1 hour triggers auto-detection to this profile.
+# Three leverage-invariant dimensions: ratio (Sharpe) × rank (IC) × shape (Omega).
+
+name: hft
+description: >
+  Profile for high-frequency and intraday strategies. Very tight tolerances.
+  DSR K=1000 reflecting large HFT config search space.
+
+metric_triangle:
+  optimize: sharpe
+  guardrails:
+    - {metric: ic, tolerance: 0.01}
+    - {metric: omega, tolerance: 0.05}
+
+anti_gaming:
+  pnl_floor: 0.05
+  max_dd_gate: -0.05                            # absolute gate (HFT: very tight)
+  sharpe_lo_ratio_max: 5.0       # HFT has minimal serial corr
+  ic_min: 0.01
+  ic_stability_min: 0.40
+  relative_pnl_drop_max: 0.20
+
+validation:
+  dsr_min: 0.90
+  dsr_K: 1000                    # HFT typically explores many configs
+  pbo_max: 0.10
+  oos_is_min: 0.50
+  neg_roll_frac_max: 0.10
+  max_loss_years: 1              # HFT should not have loss years
+  lo_adjusted_min: 0.0           # Lo not meaningful for tick data
+  omega_min: 1.5
+  max_dd: -0.05                  # HFT drawdown tolerance very tight
+  permutation_trials: 500        # HFT needs more trials (more noise)
+  permutation_p_max: 0.01
+  look_ahead_mag_corr_max: 0.05  # Tighter for HFT
+  look_ahead_hit_rate_max: 0.85

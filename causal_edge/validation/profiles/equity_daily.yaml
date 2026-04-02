@@ -1,0 +1,40 @@
+# Abel Proof profile: Equity Daily
+# For equity/ETF strategies on daily timeframes.
+# Annualized daily return vol 5-60% typically triggers auto-detection to this profile.
+# Also the fallback default when auto-detection is ambiguous.
+# Three leverage-invariant dimensions: ratio (Sharpe) × rank (IC) × shape (Omega).
+
+name: equity_daily
+description: >
+  Profile for daily-frequency equity and ETF strategies. Equities have lower serial
+  correlation than crypto, so raw Sharpe is the optimization target (Lo correction
+  is less impactful). IC and Omega guardrails catch prediction degradation and clipping.
+  MaxDD is an absolute gate threshold (not in triangle — scales with leverage).
+
+metric_triangle:
+  optimize: sharpe
+  guardrails:
+    - {metric: ic, tolerance: 0.005}
+    - {metric: omega, tolerance: 0.10}
+
+anti_gaming:
+  pnl_floor: 0.30
+  max_dd_gate: -0.15                           # absolute gate (not relative comparison)
+  sharpe_lo_ratio_max: 3.0
+  ic_min: 0.02
+  ic_stability_min: 0.50
+
+validation:
+  dsr_min: 0.90
+  dsr_K: 500
+  pbo_max: 0.10
+  oos_is_min: 0.50
+  neg_roll_frac_max: 0.15
+  max_loss_years: 2
+  lo_adjusted_min: 0.5
+  omega_min: 1.0
+  max_dd: -0.15
+  permutation_trials: 200
+  permutation_p_max: 0.01
+  look_ahead_mag_corr_max: 0.10
+  look_ahead_hit_rate_max: 0.90

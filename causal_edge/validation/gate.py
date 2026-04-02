@@ -149,12 +149,26 @@ def print_validation_report(results: dict) -> None:
                 print(f"      {label}: {f}")
 
     n_pass = sum(1 for r in results.values() if r["verdict"] == "PASS")
+    n_fail = sum(1 for r in results.values() if r["verdict"] == "FAIL")
     n_skip = sum(1 for r in results.values() if r["verdict"] == "SKIP")
     n_total = len(results)
     print(f"\n  {'=' * 66}")
     skip_note = f"  ({n_skip} skipped — run 'causal-edge run' first)" if n_skip else ""
     print(f"  {n_pass}/{n_total - n_skip} strategies pass Abel Proof validation{skip_note}")
     print("=" * 70)
+
+    # ── Next steps (the product loop) ────────────────────────────────
+    if n_fail > 0:
+        print()
+        print("  Next steps:")
+        print("    Fix failures  → causal-edge validate --verbose")
+        print("    Failure guide → causal_edge/validation/AGENTS.md")
+        print("    Try your own  → docs/add-strategy.md")
+        print("    Quick import  → causal-edge validate --csv your_backtest.csv")
+    elif n_pass > 0 and n_fail == 0:
+        print()
+        print("  All strategies pass. Share your report card.")
+        print("    Export → causal-edge validate --export report.txt")
 
 
 def _count_passed(metrics: dict, profile: dict) -> int:

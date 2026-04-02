@@ -1,6 +1,20 @@
 # Adding a Strategy
 
-## Quick Path
+## Fastest Path: Validate an Existing Backtest
+
+Already have a CSV with `date` and `pnl` columns? Skip everything — just validate:
+
+```bash
+causal-edge validate --csv my_backtest.csv
+```
+
+That's it. You'll get a 15-test report card in 2 seconds. No engine, no YAML, no setup.
+
+Add a `position` column for IC (Information Coefficient) analysis.
+
+## Build a Strategy Engine
+
+### Quick Path
 
 1. Copy the example:
 

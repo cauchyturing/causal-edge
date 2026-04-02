@@ -70,57 +70,80 @@ def dashboard(config, output):
 @main.command()
 @click.option("--strategy", default=None, help="Validate a specific strategy by ID")
 @click.option("--verbose", is_flag=True, help="Show detailed failure info")
+@click.option("--csv", "csv_path", default=None, help="Validate a standalone CSV (date,pnl columns)")
+@click.option("--export", "export_path", default=None, help="Export report to file")
 @click.option("--config", default="strategies.yaml", help="Config file path")
-def validate(strategy, verbose, config):
+def validate(strategy, verbose, csv_path, export_path, config):
     """Run Abel Proof 15-test validation on strategies."""
+    import io
     import sys
 
-    from causal_edge.config import load_config
     from causal_edge.validation.gate import validate_strategy, print_validation_report
 
-    cfg = load_config(config)
-    strategies = cfg["strategies"]
-    if strategy:
-        strategies = [s for s in strategies if s["id"] == strategy]
-
-    if not strategies:
-        click.echo("No strategies to validate.")
-        return
-
     results = {}
-    for s_cfg in strategies:
-        sid = s_cfg["id"]
-        log_path = s_cfg.get("trade_log", "")
-        if not Path(log_path).exists():
-            results[sid] = {
-                "verdict": "SKIP",
-                "score": "0/0",
-                "failures": [f"Trade log not found: {log_path}. Run 'causal-edge run' first."],
-                "metrics": {},
-                "triangle": {"ratio": 0, "rank": 0, "shape": 0},
-                "profile": "unknown",
-            }
-            continue
-        result = validate_strategy(log_path)
-        results[sid] = result
+
+    if csv_path:
+        # Quick path: validate a standalone CSV without strategies.yaml
+        if not Path(csv_path).exists():
+            raise click.ClickException(f"CSV not found: {csv_path}")
+        result = validate_strategy(csv_path)
+        results[Path(csv_path).stem] = result
+    else:
+        from causal_edge.config import load_config
+
+        cfg = load_config(config)
+        strategies_list = cfg["strategies"]
+        if strategy:
+            strategies_list = [s for s in strategies_list if s["id"] == strategy]
+
+        if not strategies_list:
+            click.echo("No strategies to validate.")
+            return
+
+        for s_cfg in strategies_list:
+            sid = s_cfg["id"]
+            log_path = s_cfg.get("trade_log", "")
+            if not Path(log_path).exists():
+                results[sid] = {
+                    "verdict": "SKIP",
+                    "score": "0/0",
+                    "failures": [f"Trade log not found: {log_path}. Run 'causal-edge run' first."],
+                    "metrics": {},
+                    "triangle": {"ratio": 0, "rank": 0, "shape": 0},
+                    "profile": "unknown",
+                }
+                continue
+            results[sid] = validate_strategy(log_path)
+
+    # Capture output for --export
+    if export_path:
+        old_stdout = sys.stdout
+        sys.stdout = capture = io.StringIO()
 
     print_validation_report(results)
 
     if verbose:
-        click.echo("")
+        print()
         for sid, r in results.items():
             if r.get("metrics"):
-                click.echo(f"  {sid} metrics:")
+                print(f"  {sid} metrics:")
                 m = r["metrics"]
                 for key in ("sharpe", "lo_adjusted", "sortino", "total_pnl",
                             "max_dd", "calmar", "dsr", "pbo", "oos_is",
                             "omega", "ic", "ic_hit_rate"):
                     if key in m:
-                        click.echo(f"    {key:20s} {m[key]:.4f}")
+                        print(f"    {key:20s} {m[key]:.4f}")
                 if "yearly_sharpes" in m:
-                    click.echo(f"    yearly_sharpes:")
+                    print(f"    yearly_sharpes:")
                     for yr, sh in sorted(m["yearly_sharpes"].items()):
-                        click.echo(f"      {yr}: {sh:.2f}")
+                        print(f"      {yr}: {sh:.2f}")
+
+    if export_path:
+        sys.stdout = old_stdout
+        report_text = capture.getvalue()
+        click.echo(report_text, nl=False)  # also print to terminal
+        Path(export_path).write_text(report_text)
+        click.echo(f"\n  Report exported to {export_path}")
 
     all_pass = all(r["verdict"] in ("PASS", "SKIP") for r in results.values())
     sys.exit(0 if all_pass else 1)

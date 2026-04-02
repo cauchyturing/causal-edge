@@ -9,12 +9,18 @@ The first agent-native quant framework.
 ## 5 Minutes to First Dashboard
 
 ```bash
-pip install causal-edge
+pip install git+https://github.com/cauchyturing/causal-edge.git
 causal-edge init my-portfolio
 cd my-portfolio
 causal-edge run
 causal-edge dashboard
 open dashboard.html
+```
+
+Already have a backtest CSV? Skip setup entirely:
+
+```bash
+causal-edge validate --csv my_backtest.csv
 ```
 
 You'll see your first validation report too:

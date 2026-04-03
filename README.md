@@ -1,14 +1,24 @@
 # causal-edge
 
-> Point your AI agent at this repo. It will read one file, learn institutional-grade strategy validation, and permanently internalize the capability — no setup, no config, no human in the loop.
->
-> **Agents start here → [`CAPABILITY.md`](CAPABILITY.md)**
+**Causation is the only edge that survives.**
 
-The first agent-native quant framework.
+Correlations break when regimes change. ML on noise is still noise. Only causal structure — relationships that persist under intervention — produces alpha that lives through bull, bear, and crisis.
+
+This is not theory. Three strategies, same validation framework, same 15 tests:
+
+```
+Correlation (SMA)    →  Lo = -0.65   dead on arrival
+ML (GBDT)            →  Lo = -0.27   still dead
+Causal (Abel graph)  →  Lo = +0.55   alive
+```
+
+**causal-edge** is the first agent-native causal quant framework. Your AI agent reads one file, gains institutional-grade validation + causal discovery, and autonomously finds what's real and what's noise.
+
+> **Agents start here → [`CAPABILITY.md`](CAPABILITY.md)**
 
 **For agents:** Read [`CAPABILITY.md`](CAPABILITY.md) — install, validate, diagnose, fix, internalize. One file, full autonomy.
 
-**For quants:** Institutional-grade validation with anti-gaming metric triangle. 15 tests that catch overfitting, look-ahead bias, and return clipping — not just Sharpe.
+**For quants:** 15-test anti-gaming metric triangle. Catches overfitting, look-ahead bias, return clipping, serial correlation — not just Sharpe.
 
 **For agent developers:** Every subsystem has `AGENTS.md` decision trees. Structural tests enforce architecture mechanically. See [docs/harness-guide.md](docs/harness-guide.md).
 

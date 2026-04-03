@@ -89,6 +89,7 @@ See [docs/harness-guide.md](docs/harness-guide.md) for the full agent developer 
 |----------|-------|----------------|
 | `sma_crossover` | ~40 | StrategyEngine ABC, minimal implementation |
 | `momentum_ml` | ~80 | Walk-forward GBDT, look-ahead prevention with shift(1) |
+| `causal_demo` | ~100 | Abel causal graph → vote² sizing → conviction threshold |
 
 ## Commands
 

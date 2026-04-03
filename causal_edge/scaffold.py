@@ -29,16 +29,22 @@ def scaffold_project(name: str) -> Path:
     root.mkdir()
     (root / "strategies" / "sma_crossover").mkdir(parents=True)
     (root / "strategies" / "momentum_ml").mkdir(parents=True)
+    (root / "strategies" / "causal_demo").mkdir(parents=True)
     (root / "data").mkdir()
     (root / "data" / ".gitkeep").write_text("")
 
-    # Copy example engines
+    # Copy example engines + causal graph data
     examples_dir = Path(__file__).parent.parent / "examples"
-    for name_dir in ("sma_crossover", "momentum_ml"):
+    for name_dir in ("sma_crossover", "momentum_ml", "causal_demo"):
         src = examples_dir / name_dir / "engine.py"
         dst = root / "strategies" / name_dir / "engine.py"
         if src.exists():
             shutil.copy2(src, dst)
+
+    # Copy causal graph JSON
+    graph_src = examples_dir / "causal_demo" / "causal_graph.json"
+    if graph_src.exists():
+        shutil.copy2(graph_src, root / "strategies" / "causal_demo" / "causal_graph.json")
 
     # Fallback if examples not found (pip install without source tree)
     if not (root / "strategies" / "sma_crossover" / "engine.py").exists():
@@ -47,6 +53,7 @@ def scaffold_project(name: str) -> Path:
     (root / "strategies" / "__init__.py").write_text("")
     (root / "strategies" / "sma_crossover" / "__init__.py").write_text("")
     (root / "strategies" / "momentum_ml" / "__init__.py").write_text("")
+    (root / "strategies" / "causal_demo" / "__init__.py").write_text("")
 
     # strategies.yaml
     (root / "strategies.yaml").write_text(_STRATEGIES_YAML)
@@ -86,6 +93,13 @@ strategies:
     color: "#FF9500"
     engine: strategies.momentum_ml.engine
     trade_log: "data/trade_log_momentum_ml.csv"
+
+  - id: causal_demo
+    name: "Causal Voting (TON)"
+    asset: TON
+    color: "#30D158"
+    engine: strategies.causal_demo.engine
+    trade_log: "data/trade_log_causal_demo.csv"
 """
 
 _ENV_EXAMPLE = """\

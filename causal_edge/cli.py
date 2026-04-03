@@ -25,9 +25,10 @@ def init(name):
         raise click.ClickException(str(e))
 
     click.echo(f"Created {root}/")
-    click.echo(f"  strategies.yaml          (2 demo strategies)")
+    click.echo(f"  strategies.yaml          (3 demo strategies)")
     click.echo(f"  strategies/sma_crossover (simple SMA)")
     click.echo(f"  strategies/momentum_ml   (walk-forward GBDT)")
+    click.echo(f"  strategies/causal_demo   (Abel causal graph voting)")
     click.echo(f"  CLAUDE.md + AGENTS.md    (agent harness)")
     click.echo(f"  .env.example             (Abel API key, optional)")
     click.echo(f"")

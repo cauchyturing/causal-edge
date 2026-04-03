@@ -26,6 +26,12 @@ dev = ["pytest>=7.0", "ruff>=0.4"]
 where = ["."]
 include = ["causal_edge*"]
 
+[tool.setuptools.package-data]
+"causal_edge" = [
+    "validation/profiles/*.yaml",
+    "dashboard/templates/*.html",
+]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

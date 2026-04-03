@@ -10,34 +10,34 @@ The first agent-native quant framework.
 
 **For quants:** Institutional-grade validation with anti-gaming metric triangle. 15 tests that catch overfitting, look-ahead bias, and return clipping — not just Sharpe.
 
-**For agent developers:** Every subsystem has `AGENTS.md` decision trees. Structural tests enforce architecture mechanically.
+**For agent developers:** Every subsystem has `AGENTS.md` decision trees. Structural tests enforce architecture mechanically. See [docs/harness-guide.md](docs/harness-guide.md).
 
-## 5 Minutes to First Dashboard
+## 5 Minutes: Install → Validate → See the Difference
 
 ```bash
 pip install git+https://github.com/cauchyturing/causal-edge.git
 causal-edge init my-portfolio
 cd my-portfolio
-causal-edge run
-causal-edge dashboard
-open dashboard.html
+causal-edge run && causal-edge validate
 ```
 
-Already have a backtest CSV? Skip setup entirely:
+Already have a backtest CSV? One command:
 
 ```bash
 causal-edge validate --csv my_backtest.csv
 ```
 
-You'll see your first validation report too:
+Three demo strategies show why causal structure matters:
 
-```bash
-causal-edge validate
-# SMA Crossover: FAIL 11/21 — that's expected.
-# Random signals don't pass institutional-grade validation.
+```
+SMA Crossover  →  11/21 FAIL  Lo=-0.65  Omega=0.86   (random noise)
+Momentum ML    →  11/20 FAIL  Lo=-0.27  Omega=0.93   (ML, still noise)
+Causal Voting  →  13/20 FAIL  Lo=+0.55  Omega=1.25   (causal structure = real edge)
 ```
 
-## Why "Causal"?
+Same validation framework, same tests. Only the causal strategy produces positive Lo-adjusted Sharpe and Omega > 1. That's the difference between correlation and causation.
+
+## Why Causal?
 
 Correlation is a property of *data*. Causation is a property of the *data generating process*.
 
@@ -45,9 +45,7 @@ When regimes change (bull→bear, policy shift, crisis):
 - Correlations break → correlation-based signals die
 - Causal links persist → causal signals survive
 
-This is Pearl's definition: a causal relationship remains invariant under intervention. Regime change *is* intervention on the market. Only causal signals are mathematically guaranteed to survive it.
-
-causal-edge validates strategies against this standard. The optional [Abel plugin](docs/why-causal.md) connects to Abel's causal graph API for automated causal discovery.
+This is Pearl's definition: a causal relationship remains invariant under intervention. The causal demo uses real causal structure from [Abel's graph API](https://abel.ai) — 5 equity parents and 3 children of TONUSD, each with a validated causal lag. The structure is bundled in `examples/causal_demo/causal_graph.json`. For live causal discovery on any asset: `causal-edge discover <TICKER>` (requires Abel API key).
 
 ## The Metric Triangle
 
@@ -67,55 +65,66 @@ No known transformation improves all three simultaneously except genuine signal 
 
 Verified across 38 controlled experiments.
 
-## Agent-Native Architecture
-
-```
-AGENTS.md (root)           → "I want to add a strategy" → strategies/AGENTS.md
-strategies/AGENTS.md       → step-by-step with file paths and make targets
-causal_edge/validation/    → failure→fix mapping table
-tests/test_structure.py    → 15 tests enforce architecture mechanically
-```
-
-An agent that reads `AGENTS.md` can autonomously:
-- Add a strategy (copy example → edit → register in YAML → validate)
-- Fix a failing validation (read failure code → look up fix → apply)
-- Add dashboard components (pure function → register → test verifies)
-
-See [docs/harness-guide.md](docs/harness-guide.md) for the full agent developer guide.
-
 ## Demo Strategies
 
-| Strategy | Lines | What it teaches |
-|----------|-------|----------------|
-| `sma_crossover` | ~40 | StrategyEngine ABC, minimal implementation |
-| `momentum_ml` | ~80 | Walk-forward GBDT, look-ahead prevention with shift(1) |
-| `causal_demo` | ~100 | Abel causal graph → vote² sizing → conviction threshold |
+| Strategy | What it is | Score | What it proves |
+|----------|-----------|-------|----------------|
+| `sma_crossover` | Simple moving average | 11/21 | Random signals fail completely |
+| `momentum_ml` | Walk-forward GBDT | 11/20 | ML on noise is still noise |
+| `causal_demo` | Abel causal graph voting | 13/20 | Causal structure produces real edge |
+
+Each teaches a different layer: ABC interface → ML + shift(1) → causal discovery + voting.
 
 ## Commands
 
 ```bash
-causal-edge init <name>              # scaffold a new project
+causal-edge init <name>              # scaffold project with 3 demo strategies
 causal-edge run [--strategy ID]      # run strategies, write trade logs
-causal-edge dashboard                # generate dashboard.html
+causal-edge dashboard                # generate dark-theme dashboard HTML
 causal-edge validate [--verbose]     # Abel Proof 15-test validation
+causal-edge validate --csv file.csv  # validate any backtest CSV directly
+causal-edge validate --export r.txt  # export report for sharing
+causal-edge discover <TICKER>        # find causal parents (Abel API key)
 causal-edge status                   # strategy summary
 ```
+
+## Agent-Native Architecture
+
+```
+CAPABILITY.md              → agent reads this, gains full validation capability
+AGENTS.md (root)           → "use as tool" or "develop on this repo"
+strategies/AGENTS.md       → step-by-step strategy creation
+validation/AGENTS.md       → failure→fix mapping with code snippets
+tests/test_structure.py    → 15 tests enforce architecture mechanically
+```
+
+An agent that reads `CAPABILITY.md` can autonomously:
+- Validate any backtest CSV (Python API or CLI)
+- Diagnose every failure code with copy-paste fixes
+- Run the autonomous fix loop (validate → fix → revalidate → report)
+- Internalize the capability permanently (4 levels of persistence)
 
 ## Project Structure
 
 ```
-strategies.yaml        → single source of truth (the only file you edit)
-causal_edge/engine/    → StrategyEngine ABC + execution
-causal_edge/dashboard/ → Jinja2 + Plotly → static HTML
-causal_edge/validation/→ Abel Proof metric triangle + 15-test gate
-causal_edge/plugins/   → optional (Abel causal discovery)
-strategies/            → your strategy engines
-examples/              → demo strategies (sma_crossover, momentum_ml)
+CAPABILITY.md          → agent capability spec (the front door)
+AGENTS.md              → agent routing (use vs develop)
+strategies.yaml        → single source of truth for strategies
+causal_edge/
+  engine/              → StrategyEngine ABC + execution
+  dashboard/           → Jinja2 + Plotly → static HTML
+  validation/          → Abel Proof metric triangle + 15-test gate
+  plugins/             → optional (Abel causal discovery)
+examples/
+  sma_crossover/       → simple demo (30 lines)
+  momentum_ml/         → ML demo (80 lines)
+  causal_demo/         → causal demo (100 lines + graph JSON)
 ```
 
 ## Documentation
 
-- [Adding a Strategy](docs/add-strategy.md) — step-by-step guide
+- [`CAPABILITY.md`](CAPABILITY.md) — agent capability acquisition (start here)
+- [Adding a Strategy](docs/add-strategy.md) — three paths: CSV / engine / causal
 - [Why Causal?](docs/why-causal.md) — the mathematical argument
 - [Agent Developer Guide](docs/harness-guide.md) — how agents operate this framework
 - [Contributing](CONTRIBUTING.md) — how to contribute

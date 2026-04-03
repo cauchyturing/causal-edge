@@ -14,12 +14,21 @@ Add a `position` column for IC (Information Coefficient) analysis.
 
 ## Build a Strategy Engine
 
+### Three starting points
+
+| Path | Copy from | What you get |
+|------|-----------|-------------|
+| Simple | `examples/sma_crossover/` | 30-line minimal engine |
+| ML | `examples/momentum_ml/` | Walk-forward GBDT with shift(1) |
+| Causal | `examples/causal_demo/` | Abel graph voting + causal_graph.json |
+
 ### Quick Path
 
 1. Copy the example:
 
 ```bash
 cp -r examples/sma_crossover/ strategies/my_strategy/
+# or: cp -r examples/causal_demo/ strategies/my_strategy/
 ```
 
 2. Edit `strategies/my_strategy/engine.py` — implement your signal logic

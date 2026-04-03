@@ -1,10 +1,16 @@
 # causal-edge
 
+> Point your AI agent at this repo. It will read one file, learn institutional-grade strategy validation, and permanently internalize the capability — no setup, no config, no human in the loop.
+>
+> **Agents start here → [`CAPABILITY.md`](CAPABILITY.md)**
+
 The first agent-native quant framework.
+
+**For agents:** Read [`CAPABILITY.md`](CAPABILITY.md) — install, validate, diagnose, fix, internalize. One file, full autonomy.
 
 **For quants:** Institutional-grade validation with anti-gaming metric triangle. 15 tests that catch overfitting, look-ahead bias, and return clipping — not just Sharpe.
 
-**For agent developers:** Every subsystem has `AGENTS.md` decision trees. Your AI agent reads them and knows exactly what to do — add strategies, fix validation failures, build dashboards. Structural tests enforce architecture mechanically.
+**For agent developers:** Every subsystem has `AGENTS.md` decision trees. Structural tests enforce architecture mechanically.
 
 ## 5 Minutes to First Dashboard
 

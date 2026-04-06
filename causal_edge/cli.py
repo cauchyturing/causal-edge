@@ -43,18 +43,61 @@ def init(name):
 @click.option("--strategy", default=None, help="Run a specific strategy by ID")
 @click.option("--config", default="strategies.yaml", help="Config file path")
 def run(strategy, config):
-    """Run strategies and write trade logs."""
+    """Run strategies through the harness pipeline."""
     from causal_edge.config import load_config
-    from causal_edge.engine.trader import run_all
+    from causal_edge.harness.pipeline import run_pipeline
 
     cfg = load_config(config)
-    if not cfg["strategies"]:
-        click.echo("No strategies configured. Add strategies to strategies.yaml.")
-        return
 
-    click.echo(f"Running {len(cfg['strategies'])} strategies...")
-    results = run_all(cfg, strategy_id=strategy)
-    click.echo(f"Done. {len(results)} strategies executed.")
+    if strategy:
+        cfg["strategies"] = [
+            s for s in cfg["strategies"] if s["id"] == strategy
+        ]
+        if not cfg["strategies"]:
+            raise click.ClickException(f"Strategy '{strategy}' not found")
+
+    for event in run_pipeline(cfg):
+        _print_pipeline_event(event)
+
+
+def _print_pipeline_event(event):
+    """Format pipeline events for console output."""
+    if event.status == "start":
+        labels = {"run": "Running strategies", "validate": "Validating"}
+        label = labels.get(event.phase, event.phase)
+        count = event.data.get("count", "")
+        suffix = f" ({count})" if count else ""
+        click.echo(f"  [{event.phase}] {label}{suffix}...")
+
+    elif event.status == "checkpoint":
+        parts = [f"{k}={v}" for k, v in event.data.items()]
+        click.echo(f"  [{event.phase}] done ({', '.join(parts)})")
+
+    elif event.phase == "strategy":
+        r = event.data.get("result")
+        if r:
+            lc = ">".join(r.lifecycle_log) if r.lifecycle_log else ""
+            if r.status == "ok":
+                click.echo(f"    {r.strategy_id:15s} {r.n_days:>5d} days "
+                          f"({r.duration_ms:.0f}ms) [{lc}]")
+            elif r.status == "error":
+                click.echo(f"    {r.strategy_id:15s} ERROR: {r.error}")
+
+    elif event.phase == "validation":
+        tri = event.data.get("triangle", {})
+        click.echo(f"    {event.data.get('id', ''):15s} {event.status:4s} "
+                  f"{event.data.get('score', '')} "
+                  f"Lo={tri.get('ratio', 0):.2f} "
+                  f"IC={tri.get('rank', 0):.3f} "
+                  f"Om={tri.get('shape', 0):.2f}")
+
+    elif event.status == "error":
+        click.echo(f"  [{event.phase}] ERROR: {event.data.get('msg', '')}")
+
+    elif event.phase == "pipeline" and event.status == "done":
+        ok = event.data.get("strategies_ok", 0)
+        failed = event.data.get("strategies_failed", 0)
+        click.echo(f"\n  Pipeline complete: {ok} ok, {failed} failed")
 
 
 @main.command()

@@ -260,11 +260,15 @@ class TestNoHardcodedPaths:
         pattern = re.compile(r'["\'](?:/home/|/Users/|~/Claude/)[^"\']*["\']')
         violations = []
         for f in ROOT.rglob("*.py"):
-            if "__pycache__" in str(f) or ".venv" in str(f):
+            rel = str(f.relative_to(ROOT))
+            if "__pycache__" in rel or ".venv" in rel:
+                continue
+            # Skip private strategy engines (gitignored, not part of framework)
+            if rel.startswith("strategies/") and "/engine.py" in rel:
                 continue
             for i, line in enumerate(f.read_text().splitlines(), 1):
                 if pattern.search(line):
-                    violations.append(f"{f.relative_to(ROOT)}:{i}")
+                    violations.append(f"{rel}:{i}")
         assert not violations, (
             f"Hardcoded absolute paths found:\n"
             + "\n".join(f"  {v}" for v in violations)

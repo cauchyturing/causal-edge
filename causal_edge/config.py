@@ -53,16 +53,28 @@ def _validate_strategy(strategy: dict, index: int) -> None:
 
 
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
-    """Load strategies.yaml configuration.
+    """Load strategies configuration with local overlay support.
+
+    Resolution order:
+      1. strategies.local.yaml  (private strategies, gitignored)
+      2. strategies.yaml        (public defaults / examples)
+      3. Explicit --config path (overrides both)
+
+    This allows the framework to be open-source while strategies stay private.
+    Users add strategies.local.yaml with their engines; it never enters git.
 
     Args:
-        path: Path to YAML file. Defaults to strategies.yaml in current directory.
+        path: Explicit path to YAML file. If given, skips the resolution chain.
 
     Returns:
         Dict with keys 'settings' and 'strategies'.
     """
     if path is None:
-        path = Path("strategies.yaml")
+        local_path = Path("strategies.local.yaml")
+        if local_path.exists():
+            path = local_path
+        else:
+            path = Path("strategies.yaml")
     path = Path(path)
 
     if not path.exists():

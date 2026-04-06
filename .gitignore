@@ -10,3 +10,11 @@ build/
 data/
 dashboard.html
 .ruff_cache/
+
+# Private strategies — framework is public, strategies are private.
+# Add your engines to strategies/ and config to strategies.local.yaml.
+# These files never enter git.
+strategies/*/
+!strategies/__init__.py
+!strategies/AGENTS.md
+strategies.local.yaml

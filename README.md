@@ -22,6 +22,15 @@ causal-edge init my-portfolio && cd my-portfolio
 causal-edge run && causal-edge validate
 ```
 
+The `run` command uses a generator pipeline — each strategy goes through
+a 7-step lifecycle with typed events. Compose it with any consumer:
+
+```python
+from causal_edge.harness.pipeline import run_pipeline
+for event in run_pipeline(config):
+    websocket.send(event)  # real-time dashboard
+```
+
 Or validate any backtest instantly: `causal-edge validate --csv my_backtest.csv`
 
 > **Agents → [`CAPABILITY.md`](CAPABILITY.md)** | **Quants → keep reading** | **Agent developers → [harness guide](docs/harness-guide.md)**

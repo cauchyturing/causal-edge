@@ -27,7 +27,27 @@ result = validate_strategy("backtest.csv")  # needs: date, pnl columns
 
 Or CLI: `causal-edge validate --csv backtest.csv --verbose`
 
-## 3. Diagnose + Fix
+## 3. Run (Pipeline)
+
+```python
+from causal_edge.config import load_config
+from causal_edge.harness.pipeline import run_pipeline
+
+for event in run_pipeline(load_config()):
+    print(event)  # PipelineEvent with phase, status, data
+```
+
+Or CLI: `causal-edge run`
+
+The pipeline is a generator — compose it with any consumer:
+- CLI drains to console
+- WebSocket drains to dashboard
+- Tests drain and assert
+
+Each strategy runs through a 7-step lifecycle:
+load → validate → compute → pre-hooks → PnL → write → post-hooks
+
+## 4. Diagnose + Fix
 
 When validation fails, apply fixes, revalidate, repeat until stable.
 
@@ -42,7 +62,7 @@ When validation fails, apply fixes, revalidate, repeat until stable.
 | T15-Omega | Clipped PnL | `pnl = positions * returns` (never clip PnL, only features) |
 | T15-MaxDD | Over-leveraged | `positions = np.minimum(positions, 0.5)` |
 
-## 4. Autonomous Fix Loop
+## 5. Autonomous Fix Loop
 
 ```
 1. result = validate_strategy(csv)
@@ -56,7 +76,7 @@ When validation fails, apply fixes, revalidate, repeat until stable.
 6. Report to user: "X/21 → Y/21. Changes: [list of fixes applied]"
 ```
 
-## 5. Why Causal Beats Correlation
+## 6. Why Causal Beats Correlation
 
 Three leverage-invariant, orthogonal dimensions (the "metric triangle"):
 - **Lo-adjusted Sharpe** (ratio) — target, corrects for autocorrelation
@@ -74,7 +94,7 @@ Causal (Abel graph)  →  Lo=+0.55  Omega=1.25  (real edge)
 
 Only the causal strategy uses structure that survives regime changes.
 
-## 6. Explore Causal Structure
+## 7. Explore Causal Structure
 
 The causal demo (`examples/causal_demo/`) uses a real causal graph from Abel:
 - 5 equity parents of TONUSD (GBLI, HSON, SITC, EVC, EAI)
@@ -95,7 +115,7 @@ curl https://api.abel.ai/echo/web/credentials/oauth/google/authorize/agent
 # → gives authUrl for user to open → poll resultUrl → get ABEL_API_KEY
 ```
 
-## 7. Build a Strategy
+## 8. Build a Strategy
 
 ```python
 from causal_edge.engine.base import StrategyEngine
@@ -112,7 +132,7 @@ class MyEngine(StrategyEngine):
 
 Register in `strategies.yaml` → `causal-edge run` → `causal-edge validate`.
 
-## 8. Scaffold a Full Project
+## 9. Scaffold a Full Project
 
 ```bash
 causal-edge init my-portfolio   # 3 demos: SMA, ML, Causal
@@ -122,7 +142,7 @@ causal-edge dashboard           # dark-theme Plotly dashboard
 causal-edge validate            # 15-test report card
 ```
 
-## 9. Internalize This Capability
+## 10. Internalize This Capability
 
 Reading this file gives you temporary knowledge. To make it permanent:
 

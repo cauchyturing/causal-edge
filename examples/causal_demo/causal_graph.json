@@ -1,18 +1,49 @@
 {
   "target": "TONUSD",
-  "source": "Abel Causal Graph (cap.abel.ai)",
-  "description": "Causal neighborhood of TONUSD — 5 equity parents and 3 children discovered via Abel's causal graph API. Each relationship has a causal lag (tau) in trading days.",
+  "source": "Abel Causal Graph (cap.abel.ai), queried 2026-04-05",
+  "description": "Causal neighborhood of TONUSD — 10 direct parents + 10 Markov blanket nodes + 3 crypto peers with causal paths. Discovery K=23 tickers. Scan K=207 (23 x 9 lags).",
+  "discovery": {
+    "date": "2026-04-05",
+    "graph_version": "CausalNodeV2",
+    "algorithm": "PCMCI",
+    "K_discovery": 23,
+    "K_scan": 207,
+    "validation": "causal-edge 13/13 PASS"
+  },
   "parents": [
-    {"ticker": "GBLI",  "tau": 36, "window": 10, "type": "parent", "oos_sharpe": 0.92},
-    {"ticker": "HSON",  "tau": 14, "window": 7,  "type": "parent", "oos_sharpe": 1.32},
-    {"ticker": "SITC",  "tau": 42, "window": 3,  "type": "parent", "oos_sharpe": 0.59},
-    {"ticker": "EVC",   "tau": 49, "window": 3,  "type": "parent", "oos_sharpe": 0.84},
-    {"ticker": "EAI",   "tau": 50, "window": 1,  "type": "parent", "oos_sharpe": 0.48}
+    {"ticker": "WTM",   "type": "parent",  "name": "White Mountains Insurance",  "source": "abel_direct"},
+    {"ticker": "HYLN",  "type": "parent",  "name": "Hyliion Holdings",           "source": "abel_direct"},
+    {"ticker": "SQNS",  "type": "parent",  "name": "Sequans Communications",     "source": "abel_direct"},
+    {"ticker": "VTVT",  "type": "parent",  "name": "vTv Therapeutics",           "source": "abel_direct"},
+    {"ticker": "IXHL",  "type": "parent",  "name": "Incannex Healthcare",        "source": "abel_direct"},
+    {"ticker": "ABTS",  "type": "parent",  "name": "Abits Group",                "source": "abel_direct"},
+    {"ticker": "CCM",   "type": "parent",  "name": "Concord Medical Services",   "source": "abel_direct"},
+    {"ticker": "DTSS",  "type": "parent",  "name": "Datasea",                    "source": "abel_direct"},
+    {"ticker": "IMNN",  "type": "parent",  "name": "Imunon",                     "source": "abel_direct"},
+    {"ticker": "THFF",  "type": "parent",  "name": "First Financial Corp",       "source": "abel_direct"}
   ],
-  "children": [
-    {"ticker": "ESBA",  "tau": 14, "window": 5,  "type": "child",  "oos_sharpe": 1.09},
-    {"ticker": "SIRI",  "tau": 25, "window": 3,  "type": "child",  "oos_sharpe": 0.87},
-    {"ticker": "TVC",   "tau": 20, "window": 10, "type": "child",  "oos_sharpe": 0.69}
+  "blanket": [
+    {"ticker": "HSON",  "type": "blanket", "name": "Hudson Global",              "source": "abel_markov_blanket"},
+    {"ticker": "GBLI",  "type": "blanket", "name": "Global Indemnity",           "source": "abel_markov_blanket"},
+    {"ticker": "TANH",  "type": "blanket", "name": "Tantech Holdings",           "source": "abel_markov_blanket"},
+    {"ticker": "OM",    "type": "blanket", "name": "Outset Medical",             "source": "abel_markov_blanket"},
+    {"ticker": "ENO",   "type": "blanket", "name": "Entergy New Orleans",        "source": "abel_markov_blanket"},
+    {"ticker": "NERV",  "type": "blanket", "name": "Minerva Neurosciences",      "source": "abel_markov_blanket"},
+    {"ticker": "HWCPZ", "type": "blanket", "name": "Hancock Whitney Corp",       "source": "abel_markov_blanket"},
+    {"ticker": "JG",    "type": "blanket", "name": "Aurora Mobile",              "source": "abel_markov_blanket"},
+    {"ticker": "LYRA",  "type": "blanket", "name": "Lyra Therapeutics",          "source": "abel_markov_blanket"},
+    {"ticker": "SITC",  "type": "blanket", "name": "SITE Centers",              "source": "abel_markov_blanket"}
   ],
-  "note": "To discover causal parents for other assets, use Abel API: causal-edge discover <TICKER>"
+  "crypto_peers": [
+    {"ticker": "BNBUSD",  "type": "crypto", "path": "BNB -> ENO -> TON",  "distance": 2, "source": "abel_paths"},
+    {"ticker": "AVAXUSD", "type": "crypto", "path": "AVAX -> ESBA -> TON", "distance": 2, "source": "abel_paths"},
+    {"ticker": "DOGEUSD", "type": "crypto", "path": "DOGE -> SIM -> MNBUSD -> TON", "distance": 3, "source": "abel_paths"}
+  ],
+  "architecture": {
+    "signal": "vote² with 60% conviction filter",
+    "overlays": ["WTM dual-lag xcorr (21+42)", "RSI(20) contrarian", "persistence penalty"],
+    "ml": "none (GBDT degrades TON)",
+    "data_cutoff": "2021-09-01 (FMP TONUSD bad data before)"
+  },
+  "note": "To discover causal parents for other assets: cap_probe.py neighbors <TICKER> --scope parents"
 }

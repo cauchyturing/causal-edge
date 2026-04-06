@@ -41,7 +41,7 @@ Correlation is a property of *data*. Causation is a property of the *data genera
 
 Regimes change. Correlations break. Causal links persist. This is Pearl's definition: a causal relationship remains invariant under intervention. Regime change *is* intervention.
 
-The causal demo bundles a real graph from [Abel](https://abel.ai) — 5 equity parents and 3 children of TONUSD with validated causal lags. For live discovery on any asset: `causal-edge discover <TICKER>`.
+The causal demo bundles a real graph from [Abel](https://abel.ai) — 23 nodes (10 direct parents + 10 Markov blanket + 3 crypto peers) for TONUSD. For live discovery on any asset: `causal-edge discover <TICKER>`.
 
 ## The Metric Triangle
 
@@ -77,8 +77,14 @@ Clipping → Omega drops. Serial correlation → Lo catches it. Concentration �
 ## Commands
 
 ```bash
-causal-edge init <name>              # 3 demo strategies (SMA, ML, Causal)
-causal-edge run [--strategy ID]      # run strategies, write trade logs
+# Research (autonomous alpha discovery)
+causal-edge research init <TICKER>   # Abel discovery + workspace
+causal-edge research run             # validate, record, K auto-compute
+causal-edge research status          # experiment log summary
+
+# Production (portfolio management)
+causal-edge init <name>              # scaffold project with demo strategies
+causal-edge run [--strategy ID]      # run strategies through 8-step lifecycle
 causal-edge dashboard                # dark-theme Plotly dashboard
 causal-edge validate [--verbose]     # 15-test validation
 causal-edge validate --csv file.csv  # validate any CSV directly
@@ -88,18 +94,25 @@ causal-edge discover <TICKER>        # causal parents (Abel API)
 ## Architecture
 
 ```
-CAPABILITY.md       → agent capability acquisition (the front door)
-AGENTS.md           → routing: use as tool / develop on repo
+CAPABILITY.md        → agent capability acquisition (the front door)
+AGENTS.md            → routing: use as tool / develop on repo
 causal_edge/
-  validation/       → metric triangle + 15-test gate
-  engine/           → StrategyEngine ABC + execution
-  dashboard/        → Jinja2 + Plotly → static HTML
-  plugins/          → Abel causal discovery (optional)
+  research/          → L1 enforcement for autonomous research loops
+    evaluate.py      → immutable harness (K auto-compute, validation gate)
+    workspace.py     → init workspace + Abel discovery
+  validation/        → metric triangle + 15-test gate
+  harness/           → pipeline generator + 8-step lifecycle
+  engine/            → StrategyEngine ABC + execution
+  dashboard/         → Jinja2 + Plotly → static HTML
+  plugins/           → Abel causal discovery (optional)
 examples/
-  sma_crossover/    → correlation baseline (30 lines)
-  momentum_ml/      → ML baseline (80 lines)
-  causal_demo/      → causal strategy + graph JSON (100 lines)
-tests/              → 15 structural tests enforce architecture
+  sma_crossover/     → correlation baseline (30 lines)
+  momentum_ml/       → ML baseline (80 lines)
+  causal_demo/       → TON causal strategy + Abel graph (100 lines)
+strategies/          → private strategy engines (gitignored)
+strategies.yaml      → public config (strategies: [])
+strategies.local.yaml → private config (gitignored)
+tests/               → 88 tests enforce architecture
 ```
 
 ## Docs

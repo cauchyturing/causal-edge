@@ -72,9 +72,24 @@ class MyEngine(StrategyEngine):
         ...
 ```
 
+## Deployment Checklist [ALL 4 REQUIRED]
+
+Strategy passing `--csv` is NOT deployment. The trade log and dashboard
+are what the user sees. All 4 steps must pass:
+
+```
+1. causal-edge validate --csv backtest.csv     → must PASS
+2. Backfill trade log (or: causal-edge run)    → confirm rows, dates, cum_pnl
+3. causal-edge validate --strategy <id>        → must PASS (from trade log)
+4. causal-edge dashboard                       → confirm strategy renders
+```
+
+Steps 1-2 = strategy validation. Steps 3-4 = system validation. Both required.
+
 ## Rules
 
 - All features must use `shift(1)` — zero look-ahead tolerance
 - `rolling().mean()` must be followed by `.shift(1)` before use in decisions
 - Clip returns for training features only, use unclipped for PnL
 - strategies/ must not import causal_edge/ internals (except base.py)
+- Private strategies go in `strategies.local.yaml` (gitignored), not `strategies.yaml`

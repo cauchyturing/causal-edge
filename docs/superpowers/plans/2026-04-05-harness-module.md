@@ -177,9 +177,16 @@ def execute_strategy(strategy_cfg: dict) -> SignalResult:
             log.append(f"pre_hook:warn:{e}")
             # Fail-open: hooks are UX, not safety
 
-    # Step 5: PnL computation + optional validation
-    pnl = positions * returns
-    pnl[0] = 0.0
+    # Step 5: PnL computation
+    try:
+        pnl = positions * returns
+        pnl[0] = 0.0
+        log.append("pnl:ok")
+    except Exception as e:
+        log.append("pnl:FAIL")
+        return SignalResult(sid, "error", error=f"PnL computation failed: {e}",
+                           lifecycle_log=tuple(log),
+                           duration_ms=_elapsed_ms(t0))
 
     # Step 6: Write trade log (atomic)
     try:
@@ -343,18 +350,8 @@ def run_pipeline(config: dict) -> Generator[PipelineEvent, None, None]:
         yield PipelineEvent("validate", "checkpoint",
                             {"elapsed_s": round(time.time() - t0, 1)})
 
-    # Phase: Dashboard
-    yield PipelineEvent("dashboard", "start")
-    t0 = time.time()
-    try:
-        from causal_edge.dashboard.generator import generate
-        from causal_edge.config import load_config
-        generate_config = config
-        # Dashboard reads trade logs written by the run phase
-        yield PipelineEvent("dashboard", "checkpoint",
-                            {"elapsed_s": round(time.time() - t0, 1)})
-    except Exception as e:
-        yield PipelineEvent("dashboard", "error", {"msg": str(e)})
+    # Dashboard: not auto-run in pipeline. Use `causal-edge dashboard` separately.
+    # The pipeline is for compute + validate. Dashboard is a presentation concern.
 
     yield PipelineEvent("pipeline", "done", {
         "strategies_ok": ok,
@@ -442,11 +439,8 @@ def run(strategy, config):
 
 def _print_pipeline_event(event):
     """Format pipeline events for console output."""
-    from causal_edge.harness.types import PipelineEvent
-
     if event.status == "start":
-        labels = {"run": "Running strategies", "validate": "Validating",
-                  "dashboard": "Dashboard"}
+        labels = {"run": "Running strategies", "validate": "Validating"}
         label = labels.get(event.phase, event.phase)
         count = event.data.get("count", "")
         suffix = f" ({count})" if count else ""

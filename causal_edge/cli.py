@@ -41,7 +41,7 @@ def init(name):
 
 @main.command()
 @click.option("--strategy", default=None, help="Run a specific strategy by ID")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help="Config file path (default: strategies.local.yaml > strategies.yaml)")
 def run(strategy, config):
     """Run strategies through the harness pipeline."""
     from causal_edge.config import load_config
@@ -101,7 +101,7 @@ def _print_pipeline_event(event):
 
 
 @main.command()
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help="Config file path (default: strategies.local.yaml > strategies.yaml)")
 @click.option("--output", default="dashboard.html", help="Output HTML path")
 def dashboard(config, output):
     """Generate dashboard HTML."""
@@ -117,7 +117,7 @@ def dashboard(config, output):
 @click.option("--csv", "csv_path", default=None, help="Validate a standalone CSV (date,pnl columns)")
 @click.option("--export", "export_path", default=None, help="Export report to file")
 @click.option("--card", "card_path", default=None, help="Generate Strategy Card (YAML+markdown)")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help="Config file path (default: strategies.local.yaml > strategies.yaml)")
 def validate(strategy, verbose, csv_path, export_path, card_path, config):
     """Run Abel Proof 15-test validation on strategies."""
     import io
@@ -224,7 +224,7 @@ def discover(ticker):
 
 
 @main.command()
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help="Config file path (default: strategies.local.yaml > strategies.yaml)")
 def status(config):
     """Show strategy status summary."""
     from causal_edge.config import load_config

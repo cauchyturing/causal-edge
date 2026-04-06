@@ -73,8 +73,9 @@ def dashboard(config, output):
 @click.option("--verbose", is_flag=True, help="Show detailed failure info")
 @click.option("--csv", "csv_path", default=None, help="Validate a standalone CSV (date,pnl columns)")
 @click.option("--export", "export_path", default=None, help="Export report to file")
+@click.option("--card", "card_path", default=None, help="Generate Strategy Card (YAML+markdown)")
 @click.option("--config", default="strategies.yaml", help="Config file path")
-def validate(strategy, verbose, csv_path, export_path, config):
+def validate(strategy, verbose, csv_path, export_path, card_path, config):
     """Run Abel Proof 15-test validation on strategies."""
     import io
     import sys
@@ -145,6 +146,21 @@ def validate(strategy, verbose, csv_path, export_path, config):
         click.echo(report_text, nl=False)  # also print to terminal
         Path(export_path).write_text(report_text)
         click.echo(f"\n  Report exported to {export_path}")
+
+    # Strategy Card generation
+    if card_path:
+        from causal_edge.card import generate_card, render_card
+
+        for sid, r in results.items():
+            if r["verdict"] == "SKIP":
+                continue
+            card = generate_card(r, name=sid)
+            card_text = render_card(card)
+            out = Path(card_path)
+            if len(results) > 1:
+                out = out.parent / f"{out.stem}_{sid}{out.suffix}"
+            out.write_text(card_text)
+            click.echo(f"  Strategy Card → {out}")
 
     all_pass = all(r["verdict"] in ("PASS", "SKIP") for r in results.values())
     sys.exit(0 if all_pass else 1)

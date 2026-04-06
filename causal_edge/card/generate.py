@@ -53,7 +53,7 @@ def generate_card(
         "asset": asset,
         "asset_class": asset_class,
         "author": author,
-        "date": str(date.today()),
+        "date": date.today().isoformat(),
         "direction": direction,
         # Performance
         "performance": {
@@ -121,7 +121,7 @@ def render_card(card: dict) -> str:
         lines.append(f"asset_class: {card['asset_class']}")
     if card["author"]:
         lines.append(f"author: \"{card['author']}\"")
-    lines.append(f"date: {card['date']}")
+    lines.append(f"date: \"{card['date']}\"")
     lines.append(f"direction: {card['direction']}")
     lines.append("")
 
@@ -182,12 +182,14 @@ def render_card(card: dict) -> str:
             lines.append(f"  {k}: {v}")
         lines.append("")
 
-    # Limitations
+    # Limitations (always present — empty list = no known limitations)
+    lines.append("limitations:")
     if card["limitations"]:
-        lines.append("limitations:")
         for lim in card["limitations"]:
             lines.append(f"  - \"{lim}\"")
-        lines.append("")
+    else:
+        lines.append("  []")
+    lines.append("")
 
     lines.append(f"backtest_days: {card['backtest_days']}")
     lines.append("---")

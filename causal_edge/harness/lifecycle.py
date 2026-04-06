@@ -1,5 +1,5 @@
 # causal_edge/harness/lifecycle.py
-"""7-step signal lifecycle for strategy execution.
+"""8-step signal lifecycle for strategy execution.
 
 CC Pattern: Seven-Step Tool Lifecycle (03§3).
 CC Pattern: Fail-Fast for Safety, Fail-Open for UX (08§2).
@@ -9,9 +9,13 @@ Steps:
   2. Data validation (trade log path writable?)
   3. Compute signals (engine.compute_signals())
   4. Pre-write hooks (extension point — users can add overlays)
-  5. Validate (if causal-edge validation available, run triangle)
+  5. PnL computation (positions * returns)
   6. Write trade log (atomic write)
-  7. Post-write hooks (extension point — notifications, ledger)
+  7. Validate (fail-open — log verdict, don't block write)
+  8. Post-write hooks (extension point — notifications, ledger)
+
+Validation is in the write path (Step 7) so it always runs.
+Pipeline also validates after all strategies complete (belt + suspenders).
 """
 from __future__ import annotations
 
@@ -102,7 +106,18 @@ def execute_strategy(strategy_cfg: dict) -> SignalResult:
                            lifecycle_log=tuple(log),
                            duration_ms=_elapsed_ms(t0))
 
-    # Step 7: Post-write hooks (extension point)
+    # Step 7: Validate (fail-open — log result but don't block)
+    try:
+        from causal_edge.validation.gate import validate_strategy
+        vr = validate_strategy(trade_log_path)
+        verdict = vr.get("verdict", "?")
+        score = vr.get("score", "?/?")
+        log.append(f"validate:{verdict}:{score}")
+    except Exception as e:
+        log.append(f"validate:skip:{e}")
+        # Fail-open: validation errors don't block the write
+
+    # Step 8: Post-write hooks (extension point)
     if "post_write" in hooks:
         try:
             _run_hook(hooks["post_write"], strategy_cfg, positions, dates)

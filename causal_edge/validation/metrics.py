@@ -61,13 +61,15 @@ def detect_profile(pnl: np.ndarray, dates: pd.DatetimeIndex) -> str:
 # ═══════════════════════════════════════════════════════════════════
 
 def compute_all_metrics(pnl: np.ndarray, dates: pd.DatetimeIndex,
-                        positions: np.ndarray = None) -> dict:
+                        positions: np.ndarray = None,
+                        K: int | None = None) -> dict:
     """Compute all strategy metrics from a PnL array.
 
     Args:
         pnl: daily log-return PnL array
         dates: DatetimeIndex aligned with pnl
         positions: optional position array for IC computation
+        K: number of independent trials for DSR. Default 300 if not provided.
 
     Returns dict with all metrics needed for validation gate.
     """
@@ -95,7 +97,7 @@ def compute_all_metrics(pnl: np.ndarray, dates: pd.DatetimeIndex,
     cf = 1 + 2 * sum(rho[k] * (1 - (k + 1) / 252) for k in range(10))
     lo_adjusted = sharpe * np.sqrt(1 / cf) if cf > 0 else sharpe
 
-    dsr = _dsr(pnl, T, K=300)
+    dsr = _dsr(pnl, T, K=K if K is not None else 300)
     pbo, oos_sharpes = _cpcv(pnl, n_groups=16)
 
     # OOS/IS (mechanical 50/50 split)

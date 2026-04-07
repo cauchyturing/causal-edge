@@ -8,7 +8,7 @@ ML (GBDT)            →  Lo = -0.27   still dead
 Causal (Abel graph)  →  Lo = +0.55   alive
 ```
 
-Same framework. Same 15 tests. Only causal structure produces alpha that lives through regime changes. But discovering causal structure, building strategies from it, validating them, and iterating — that's not a human-speed task.
+Same framework. Same 13 tests. Only causal structure produces alpha that lives through regime changes. But discovering causal structure, building strategies from it, validating them, and iterating — that's not a human-speed task.
 
 **Point your agent at this repo.** It reads [`CAPABILITY.md`](CAPABILITY.md), gains institutional-grade causal validation, and autonomously runs the discovery→build→validate→fix loop. No docs to study. No setup to debug. One file, full capability.
 
@@ -86,7 +86,7 @@ causal-edge research status          # experiment log summary
 causal-edge init <name>              # scaffold project with demo strategies
 causal-edge run [--strategy ID]      # run strategies through 8-step lifecycle
 causal-edge dashboard                # dark-theme Plotly dashboard
-causal-edge validate [--verbose]     # 15-test validation
+causal-edge validate [--verbose]     # 13-test validation
 causal-edge validate --csv file.csv  # validate any CSV directly
 causal-edge discover <TICKER>        # causal parents (Abel API)
 ```
@@ -100,7 +100,7 @@ causal_edge/
   research/          → L1 enforcement for autonomous research loops
     evaluate.py      → immutable harness (K auto-compute, validation gate)
     workspace.py     → init workspace + Abel discovery
-  validation/        → metric triangle + 15-test gate
+  validation/        → metric triangle + 13-test gate
   harness/           → pipeline generator + 8-step lifecycle
   engine/            → StrategyEngine ABC + execution
   dashboard/         → Jinja2 + Plotly → static HTML

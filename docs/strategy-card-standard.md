@@ -48,7 +48,7 @@ validation:
   tests:
     dsr: {value, threshold, status}
     pbo: {value, threshold, status}
-    # ... all 15 tests
+    # ... all 13 tests
 ```
 
 ### Recommended Fields (SHOULD)

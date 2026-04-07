@@ -119,7 +119,7 @@ def dashboard(config, output):
 @click.option("--card", "card_path", default=None, help="Generate Strategy Card (YAML+markdown)")
 @click.option("--config", default=None, help="Config file path (default: strategies.local.yaml > strategies.yaml)")
 def validate(strategy, verbose, csv_path, export_path, card_path, config):
-    """Run Abel Proof 15-test validation on strategies."""
+    """Run Abel Proof 13-test validation on strategies."""
     import io
     import sys
 

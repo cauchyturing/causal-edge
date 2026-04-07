@@ -10,7 +10,7 @@
 > AGENTS.md is the architecture. Structural tests are the guardrails. Abel Proof is the validation engine.
 
 **Dual audience**:
-- **Quant researchers/traders**: Institutional-grade 15-test validation, anti-gaming metric triangle, zero look-ahead tolerance. `causal-edge init → run → validate` in 5 minutes.
+- **Quant researchers/traders**: Institutional-grade 13-test validation, anti-gaming metric triangle, zero look-ahead tolerance. `causal-edge init → run → validate` in 5 minutes.
 - **Agent developers**: Every subsystem has AGENTS.md decision trees. Structural tests mechanically enforce architecture. An agent reads AGENTS.md and autonomously adds strategies, fixes validation failures, builds dashboards.
 
 **Competitive differentiation**: backtrader/zipline/lean have more features. None are agent-native. AGENTS.md as executable architecture spec is the category-defining feature.
@@ -154,7 +154,7 @@ make lint    # Structural tests alone pass
 - `causal-edge init` scaffolds project with SMA demo + CLAUDE.md + AGENTS.md (harness is contagious)
 - `causal-edge run` iterates strategies.yaml, calls compute_signals(), writes trade_log CSV
 - `causal-edge dashboard` reads trade_logs → Jinja2 → static dashboard.html
-- `causal-edge validate` reads trade_logs → Abel Proof 15-test → PASS/FAIL with exit code
+- `causal-edge validate` reads trade_logs → Abel Proof 13-test → PASS/FAIL with exit code
 
 **CLI behavior**:
 
@@ -293,7 +293,7 @@ make test                      # Still passes (TestPluginsOptional)
 
 The first agent-native quant framework.
 
-**For quants**: Institutional-grade 15-test validation, anti-gaming metric triangle.
+**For quants**: Institutional-grade 13-test validation, anti-gaming metric triangle.
 **For agent developers**: AGENTS.md decision trees — your agent reads them, knows what to do.
 
 ## 5 Minutes to First Dashboard

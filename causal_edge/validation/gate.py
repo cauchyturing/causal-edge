@@ -110,6 +110,7 @@ def validate_strategy(
         "score": f"{passed_count}/{total_tests}",
         "failures": failures,
         "warnings": la_notes,
+        "semantic_review": "required",
         "metrics": metrics,
         "triangle": triangle,
         "profile": profile_name,

@@ -1,9 +1,6 @@
-# Validation Subsystem — Abel Proof Gate
+# Validation — Abel Proof Gate
 
-Three leverage-invariant dimensions:
-- **Ratio** (Lo-adjusted Sharpe) — optimized
-- **Rank** (IC) — guardrail, catches concentration
-- **Shape** (Omega) — guardrail, catches clipping
+Three leverage-invariant dimensions: **Lo** (ratio), **IC** (rank), **Omega** (shape).
 
 ## I want to...
 
@@ -12,43 +9,29 @@ Three leverage-invariant dimensions:
 
 ### Understand why it failed
 
-| Code | Fix | How |
-|------|-----|-----|
-| T6 DSR | Reduce trials | Fewer param combos in grid search. K<50 ideal |
-| T7 PBO | Simplify model | Fewer features, shallower trees: `max_depth=3` |
-| T12 OOS/IS | Regularize | Shorter train window: `window=126` not `504` |
-| T13 NegRoll | Add trend filter | `if price < sma_50: position = 0` |
-| T14 LossYrs | Check signal decay | Plot rolling Sharpe — is alpha disappearing? |
-| T15-Lo | Fix serial corr | Persistence penalty: `pos[t] *= max(0.3, 1-0.1*hold_days)` |
-| T15-Omega | Stop clipping | Use raw returns for PnL: `pnl = pos * returns` not `clip()` |
-| T15-MaxDD | Reduce sizing | Cap position: `pos = min(pos, 0.5)` |
+| Code | Fix |
+|------|-----|
+| T6 DSR | Fewer param combos (K<50). |
+| T7 PBO | Fewer features, shallower trees. |
+| T12 OOS/IS | Shorter train window. |
+| T13 NegRoll | Add trend filter. |
+| T14 LossYrs | Check signal decay. |
+| T15-Lo | Persistence penalty. |
+| T15-Omega | Use raw returns for PnL. |
+| T15-MaxDD | Reduce sizing. |
+| R1 pos×return | Fix look-ahead in features. |
 
-### Common fix patterns
+### Semantic look-ahead review
 
-**Trend filter (fixes T13):**
-```python
-sma = prices.rolling(50).mean().shift(1)
-positions[prices.shift(1) < sma] = 0.0
-```
-
-**Persistence penalty (fixes T15-Lo):**
-```python
-hold = (positions > 0).astype(int)
-hold_days = hold.groupby((hold != hold.shift()).cumsum()).cumcount()
-positions *= np.maximum(0.3, 1.0 - 0.1 * hold_days)
-```
-
-**Unclipped PnL (fixes T15-Omega):**
-```python
-# WRONG: pnl = pos * np.clip(returns, -0.02, 0.02)
-# RIGHT: pnl = pos * returns  (clip features only, never PnL)
-```
-
-### Understand the metric triangle
-Read docstring at top of `metrics.py`. No known transformation
-improves all three simultaneously except genuine signal improvement.
+When validation shows `semantic_review: required`:
+1. Read the strategy source code
+2. Apply rules in `look_ahead_rules.md` (7 rules: R-SHIFT through R-EXPANDING)
+3. Track data flow through assignments — code regex can't do this, you can
+4. Report: `SEMANTIC CLEAN` or `SEMANTIC VIOLATION: R-xxx Lnn — description`
 
 ## Key Files
-- `metrics.py` — `compute_all_metrics()`, `validate()`, `decide_keep_discard()`
-- `gate.py` — `validate_strategy()` (CSV in → PASS/FAIL out)
-- `profiles/` — YAML threshold configs (crypto_daily, equity_daily, hft)
+- `gate.py` — `validate_strategy()` (CSV → PASS/FAIL)
+- `metrics.py` — `compute_all_metrics()`, `validate()`
+- `look_ahead.py` — static T2-T5 + runtime R1/R2
+- `look_ahead_rules.md` — semantic rules for agent review
+- `profiles/` — threshold configs (crypto_daily, equity_daily, hft)

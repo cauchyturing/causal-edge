@@ -72,6 +72,10 @@ def validate_strategy(
         profile_name = profile
     prof = load_profile(profile_name)
 
+    # Runtime look-ahead check
+    from causal_edge.validation.look_ahead import check_runtime
+    la_warnings = check_runtime(pnl, positions if positions is not None else np.zeros(len(pnl)))
+
     # Compute all metrics
     metrics = compute_all_metrics(pnl, dates, positions, K=K)
 
@@ -89,14 +93,23 @@ def validate_strategy(
         "shape": metrics.get("omega", 0),
     }
 
-    # Count tests (fixed denominator — same total regardless of pass/fail)
-    total_tests = _count_passed(metrics, prof)
+    # Look-ahead: R1 (corr leak) = hard fail, R2 (hit rate) = warning only
+    la_failures = [w for w in la_warnings if w.startswith("R1")]
+    la_notes = [w for w in la_warnings if not w.startswith("R1")]
+    for w in la_failures:
+        failures.append(w)
+    if la_failures:
+        passed = False
+
+    # Count tests (fixed denominator: metric tests + 1 runtime look-ahead check)
+    total_tests = _count_passed(metrics, prof) + 1  # R1
     passed_count = total_tests - len(failures)
 
     return {
         "verdict": "PASS" if passed else "FAIL",
         "score": f"{passed_count}/{total_tests}",
         "failures": failures,
+        "warnings": la_notes,
         "metrics": metrics,
         "triangle": triangle,
         "profile": profile_name,

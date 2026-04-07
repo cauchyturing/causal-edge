@@ -83,20 +83,9 @@ def compute_k(strategy_path: Path) -> tuple[int, list[str], list[int]]:
 
 
 def check_look_ahead(strategy_path: Path) -> list[str]:
-    """Static look-ahead check on strategy.py source."""
-    source = strategy_path.read_text()
-    violations = []
-
-    # rolling() without .shift()
-    for m in re.finditer(r'\.rolling\(\d+\)\.\w+\(\)', source):
-        line_num = source[:m.start()].count('\n') + 1
-        after = source[m.end():m.end() + 40]
-        if '.shift(' not in after:
-            ctx = source[max(0, m.start() - 10):m.end() + 30].strip()
-            if 'shift(-' not in ctx:
-                violations.append(f"L{line_num}: rolling() without .shift(): {ctx}")
-
-    return violations
+    """Static look-ahead check on strategy.py source (T2-T5)."""
+    from causal_edge.validation.look_ahead import check_static_file
+    return check_static_file(strategy_path)
 
 
 def run_evaluation(workdir: Path | str | None = None) -> dict:

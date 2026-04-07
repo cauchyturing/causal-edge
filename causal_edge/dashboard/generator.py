@@ -54,6 +54,34 @@ def _prepare_strategy(s_cfg: dict) -> dict:
     name = s_cfg["name"]
     color = s_cfg["color"]
 
+    # Run causal-edge validation
+    validation = None
+    try:
+        from causal_edge.validation.gate import validate_strategy
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w") as f:
+            positions_arr = positions
+            vdf = pd.DataFrame({"date": dates, "pnl": pnl, "position": positions_arr})
+            vdf.to_csv(f.name, index=False)
+            vr = validate_strategy(f.name, positions_col="position")
+            Path(f.name).unlink(missing_ok=True)
+            validation = {
+                "verdict": vr["verdict"],
+                "score": vr["score"],
+                "failures": vr.get("failures", []),
+                "triangle": vr.get("triangle", {}),
+                "metrics": {k: round(v, 4) if isinstance(v, float) else v
+                            for k, v in vr.get("metrics", {}).items()
+                            if k in ("sharpe", "lo_adjusted", "ic", "omega",
+                                     "max_dd", "dsr", "pbo", "oos_is",
+                                     "neg_roll_frac", "loss_years", "total_pnl",
+                                     "calmar", "bootstrap_p", "ic_stability",
+                                     "sharpe_lo_ratio", "sortino",
+                                     "ic_hit_rate", "ic_monthly_mean")},
+            }
+    except Exception:
+        pass
+
     return {
         "id": s_cfg["id"], "name": name,
         "color": color, "asset": s_cfg["asset"],
@@ -61,6 +89,7 @@ def _prepare_strategy(s_cfg: dict) -> dict:
         "has_data": True,
         "metrics": compute_metrics(pnl),
         "live": live_metrics(dates, pnl, source),
+        "validation": validation,
         "yearly": yearly_metrics(dates, pnl),
         # Charts (all JSON strings)
         "equity_json": equity_chart(dates, cum_pnl, name, color),

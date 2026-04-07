@@ -90,7 +90,7 @@
                         <td>{{ "%.0f"|format(s.metrics.win_rate * 100) }}%</td>
                         <td>{{ s.metrics.n_days }}</td>
                         <td>{% if s.live %}<span class="pnl-pos">{{ s.live.n_days }}d {{ "%.2f"|format(s.live.sharpe) }}</span>{% else %}<span style="color:#666;">—</span>{% endif %}</td>
-                        <td>{% if s.badge %}<span class="badge badge-pass">{{ s.badge }}</span>{% endif %}</td>
+                        <td>{% if s.validation %}<span class="badge {{ 'badge-pass' if s.validation.verdict == 'PASS' else 'badge-fail' }}">{{ s.validation.score }}</span>{% elif s.badge %}<span class="badge badge-pass">{{ s.badge }}</span>{% endif %}</td>
                         {% else %}
                         <td colspan="8" style="color: #666;">No data — <code>causal-edge run</code></td>
                         {% endif %}
@@ -186,6 +186,80 @@
                 <div class="chart-box"><div id="monthly-{{ s.id }}"></div></div>
                 <div class="chart-box"><div id="position-{{ s.id }}"></div></div>
             </div>
+
+            <!-- Validation (15-test) -->
+            {% if s.validation %}
+            <div class="chart-box" style="margin-top: 12px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <span style="font-size: 15px; font-weight: 600; color: #fff;">Abel Proof Validation</span>
+                    <span class="badge {{ 'badge-pass' if s.validation.verdict == 'PASS' else 'badge-fail' }}">
+                        {{ s.validation.score }} {{ s.validation.verdict }}
+                    </span>
+                </div>
+
+                <!-- Triangle -->
+                {% set tri = s.validation.triangle %}
+                <div style="display: flex; gap: 32px; margin-bottom: 16px;">
+                    <div class="metric-item">
+                        <div class="label">Lo-adjusted (Ratio)</div>
+                        <div class="value {{ 'pnl-pos' if tri.ratio > 1 else 'pnl-neg' }}">{{ "%.3f"|format(tri.ratio) }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="label">IC (Rank)</div>
+                        <div class="value {{ 'pnl-pos' if tri.rank > 0 else 'pnl-neg' }}">{{ "%.4f"|format(tri.rank) }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="label">Omega (Shape)</div>
+                        <div class="value {{ 'pnl-pos' if tri.shape > 1 else 'pnl-neg' }}">{{ "%.3f"|format(tri.shape) }}</div>
+                    </div>
+                </div>
+
+                <!-- Full metrics table -->
+                <table style="font-size: 13px;">
+                    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+                    <tbody>
+                    {% set vm = s.validation.metrics %}
+                    {% for label, key, is_pct in [
+                        ("Sharpe", "sharpe", false),
+                        ("Lo-adjusted Sharpe", "lo_adjusted", false),
+                        ("Sortino", "sortino", false),
+                        ("IC", "ic", false),
+                        ("IC Stability", "ic_stability", true),
+                        ("IC Hit Rate", "ic_hit_rate", true),
+                        ("Omega", "omega", false),
+                        ("DSR", "dsr", true),
+                        ("PBO", "pbo", true),
+                        ("OOS/IS", "oos_is", false),
+                        ("MaxDD", "max_dd", true),
+                        ("Neg Rolling", "neg_roll_frac", true),
+                        ("Loss Years", "loss_years", false),
+                        ("Bootstrap p", "bootstrap_p", false),
+                        ("Sharpe/Lo Ratio", "sharpe_lo_ratio", false),
+                        ("Total PnL", "total_pnl", true),
+                        ("Calmar", "calmar", false),
+                    ] %}
+                    {% if key in vm %}
+                    <tr>
+                        <td>{{ label }}</td>
+                        <td style="font-family: monospace;">
+                        {% if is_pct %}{{ "%.1f"|format(vm[key] * 100) }}%{% elif key == "loss_years" %}{{ vm[key] }}{% else %}{{ "%.4f"|format(vm[key]) }}{% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                    </tbody>
+                </table>
+
+                {% if s.validation.failures %}
+                <div style="margin-top: 12px; padding: 8px 12px; background: #ff453a10; border-radius: 6px;">
+                    <div style="font-size: 11px; color: #ff453a; text-transform: uppercase; margin-bottom: 4px;">Failures</div>
+                    {% for f in s.validation.failures %}
+                    <div style="font-size: 13px; color: #ff453a; font-family: monospace;">{{ f }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
 
             <!-- Yearly table -->
             {% if s.yearly %}

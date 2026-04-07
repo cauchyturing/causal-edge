@@ -170,18 +170,22 @@ def monthly_heatmap(dates, pnl, name: str) -> str:
     pivot = pivot.reindex(columns=range(1, 13))
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    z_vals = pivot.fillna(0).values * 100
     text = np.where(np.isnan(pivot.values), "",
                     np.round(pivot.values * 100, 1).astype(str) + "%")
     fig = go.Figure()
     fig.add_trace(go.Heatmap(
-        z=pivot.values * 100, x=months, y=[str(y) for y in pivot.index],
+        z=z_vals.tolist(), x=months, y=[str(y) for y in pivot.index],
         colorscale=[[0, "#FF453A"], [0.5, "#1C1C1E"], [1, "#30D158"]],
-        zmid=0, text=text, texttemplate="%{text}",
+        zmid=0, text=text.tolist(), texttemplate="%{text}",
         textfont=dict(size=11, color="#E5E5EA"),
         showscale=False, hovertemplate="%{y} %{x}: %{z:.1f}%<extra></extra>",
     ))
-    fig.update_layout(**_layout(f"{name} — Monthly Returns", 300))
-    fig.update_layout(yaxis=dict(autorange="reversed"))
+    layout = _layout(f"{name} — Monthly Returns", 300)
+    layout["yaxis"]["autorange"] = "reversed"
+    layout["yaxis"]["type"] = "category"
+    layout["xaxis"]["type"] = "category"
+    fig.update_layout(**layout)
     return _chart_to_json(fig)
 
 

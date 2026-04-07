@@ -108,7 +108,13 @@ def _prepare_strategy(s_cfg: dict) -> dict:
 
 def generate(config_path: str, output_path: str) -> None:
     cfg = load_config(config_path)
-    strategies = [_prepare_strategy(s) for s in cfg["strategies"]]
+    strat_list = cfg["strategies"]
+    if len(strat_list) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(len(strat_list), 8)) as pool:
+            strategies = list(pool.map(_prepare_strategy, strat_list))
+    else:
+        strategies = [_prepare_strategy(s) for s in strat_list]
 
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
     env.globals["fmt_pnl_pct"] = fmt_pnl_pct

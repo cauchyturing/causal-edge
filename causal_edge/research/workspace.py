@@ -138,9 +138,10 @@ def _try_abel_discovery(ticker: str) -> dict:
 
 
 def _run_abel_discovery(ticker: str, api_key: str) -> dict:
-    """Query Abel CAP for parents + blanket + children."""
+    """Query Abel CAP for parents + blanket + children (parallel)."""
     import urllib.request
     import urllib.error
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     base = "https://cap.abel.ai/api"
     headers = {
@@ -169,28 +170,37 @@ def _run_abel_discovery(ticker: str, api_key: str) -> dict:
         else:
             node_id = f"{node_id}.price"
 
-    # Parents
-    parents_resp = _cap_call("graph.neighbors", {"node_id": node_id, "scope": "parents", "max_neighbors": 20})
-    parents = [n["node_id"] for n in parents_resp.get("result", {}).get("neighbors", [])]
+    # Parallel: parents + blanket + children (3 independent queries)
+    results = {}
+    def _query_parents():
+        r = _cap_call("graph.neighbors", {"node_id": node_id, "scope": "parents", "max_neighbors": 20})
+        return [n["node_id"] for n in r.get("result", {}).get("neighbors", [])]
 
-    # Blanket
-    try:
-        blanket_resp = _cap_call("extensions.abel.markov_blanket", {"target_node": node_id})
-        blanket = blanket_resp.get("result", {}).get("markov_blanket", [])
-    except Exception:
-        blanket = []
+    def _query_blanket():
+        try:
+            r = _cap_call("extensions.abel.markov_blanket", {"target_node": node_id})
+            return r.get("result", {}).get("markov_blanket", [])
+        except Exception:
+            return []
 
-    # Children
-    children_resp = _cap_call("graph.neighbors", {"node_id": node_id, "scope": "children", "max_neighbors": 20})
-    children = [n["node_id"] for n in children_resp.get("result", {}).get("neighbors", [])]
+    def _query_children():
+        r = _cap_call("graph.neighbors", {"node_id": node_id, "scope": "children", "max_neighbors": 20})
+        return [n["node_id"] for n in r.get("result", {}).get("neighbors", [])]
 
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_parents = pool.submit(_query_parents)
+        f_blanket = pool.submit(_query_blanket)
+        f_children = pool.submit(_query_children)
+
+    parents = f_parents.result()
+    blanket = f_blanket.result()
+    children = f_children.result()
     blanket_new = [b for b in blanket if b not in parents and b not in children]
-
     K = len(set(parents + blanket_new))
 
     return {
         "ticker": ticker,
-        "source": "Abel CAP (live)",
+        "source": "Abel CAP (live, parallel)",
         "parents": parents,
         "blanket_new": blanket_new,
         "children": children,

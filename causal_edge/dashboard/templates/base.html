@@ -7,30 +7,39 @@
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #1a1a2e; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        body { background: #1a1a2e; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; }
         .header { background: #16213e; padding: 16px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
         .header h1 { font-size: 20px; font-weight: 600; color: #fff; }
         .header .meta { font-size: 12px; color: #888; }
-        .tabs { display: flex; gap: 4px; padding: 8px 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
-        .tab { padding: 8px 16px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 13px; color: #aaa; background: transparent; border: none; }
+        .tabs { display: flex; gap: 4px; padding: 8px 24px; background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap; }
+        .tab { padding: 8px 16px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 13px; color: #aaa; background: transparent; border: none; transition: all 0.2s; }
         .tab:hover { color: #fff; background: #1a1a2e; }
         .tab.active { color: #fff; background: #1a1a2e; border-bottom: 2px solid #0a84ff; }
-        .content { padding: 24px; max-width: 1200px; margin: 0 auto; }
+        .content { padding: 24px; max-width: 1400px; margin: 0 auto; }
         .panel { display: none; }
         .panel.active { display: block; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
         table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-        th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #0f3460; font-size: 12px; color: #888; text-transform: uppercase; }
+        th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #0f3460; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
         td { padding: 10px 12px; border-bottom: 1px solid #1e2a4a; font-size: 14px; }
+        tr:hover td { background: #16213e; }
         .pnl-pos { color: #30d158; }
         .pnl-neg { color: #ff453a; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
         .badge-pass { background: #30d15820; color: #30d158; }
         .badge-fail { background: #ff453a20; color: #ff453a; }
-        .badge-none { background: #88888820; color: #888; }
-        .chart-container { margin-top: 16px; background: #16213e; border-radius: 8px; padding: 16px; }
-        .strategy-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .chart-box { background: #16213e; border-radius: 8px; padding: 16px; margin-top: 12px; }
+        .strategy-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
         .strategy-header .dot { width: 12px; height: 12px; border-radius: 50%; }
         .strategy-header h2 { font-size: 18px; }
+        .metrics-bar { display: flex; gap: 24px; flex-wrap: wrap; padding: 12px 16px; background: #16213e; border-radius: 8px; margin-bottom: 12px; }
+        .metric-item { text-align: center; }
+        .metric-item .label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric-item .value { font-size: 18px; font-weight: 600; color: #fff; }
+        .yearly-table { margin-top: 12px; }
+        .yearly-table td { padding: 6px 10px; font-size: 13px; }
+        .yearly-table th { font-size: 10px; }
         .no-data { text-align: center; padding: 60px; color: #666; }
     </style>
 </head>
@@ -61,37 +70,36 @@
                         <th>Sharpe</th>
                         <th>PnL</th>
                         <th>MaxDD</th>
+                        <th>Calmar</th>
                         <th>Win Rate</th>
                         <th>Days</th>
+                        <th>Live</th>
+                        <th>Badge</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for s in strategies %}
-                    <tr>
-                        <td>
-                            <span style="color: {{ s.color }}">&#9679;</span>
-                            {{ s.name }}
-                        </td>
+                    <tr onclick="showTab('{{ s.id }}')" style="cursor:pointer;">
+                        <td><span style="color: {{ s.color }}">&#9679;</span> {{ s.name }}</td>
                         <td>{{ s.asset }}</td>
                         {% if s.has_data %}
-                        <td>{{ "%.2f"|format(s.metrics.sharpe) }}</td>
-                        <td class="{{ 'pnl-pos' if s.metrics.cum_pnl > 0 else 'pnl-neg' }}">
-                            {{ fmt_pnl_pct(s.metrics.cum_pnl) }}
-                        </td>
+                        <td class="{{ 'pnl-pos' if s.metrics.sharpe > 0 else 'pnl-neg' }}">{{ "%.2f"|format(s.metrics.sharpe) }}</td>
+                        <td class="{{ 'pnl-pos' if s.metrics.cum_pnl > 0 else 'pnl-neg' }}">{{ fmt_pnl_pct(s.metrics.cum_pnl) }}</td>
                         <td class="pnl-neg">-{{ "%.1f"|format(s.metrics.max_dd * 100) }}%</td>
+                        <td>{{ "%.1f"|format(s.metrics.calmar) }}</td>
                         <td>{{ "%.0f"|format(s.metrics.win_rate * 100) }}%</td>
                         <td>{{ s.metrics.n_days }}</td>
+                        <td>{% if s.live %}<span class="pnl-pos">{{ s.live.n_days }}d {{ "%.2f"|format(s.live.sharpe) }}</span>{% else %}<span style="color:#666;">—</span>{% endif %}</td>
+                        <td>{% if s.badge %}<span class="badge badge-pass">{{ s.badge }}</span>{% endif %}</td>
                         {% else %}
-                        <td colspan="5" style="color: #666;">No data — run <code>causal-edge run</code></td>
+                        <td colspan="8" style="color: #666;">No data — <code>causal-edge run</code></td>
                         {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="no-data">
-                No strategies configured. Add strategies to <code>strategies.yaml</code>.
-            </div>
+            <div class="no-data">No strategies configured.</div>
             {% endif %}
         </div>
 
@@ -102,15 +110,100 @@
                 <div class="dot" style="background: {{ s.color }}"></div>
                 <h2>{{ s.name }}</h2>
                 <span style="color: #888;">{{ s.asset }}</span>
+                {% if s.badge %}<span class="badge badge-pass">{{ s.badge }}</span>{% endif %}
             </div>
 
             {% if s.has_data %}
-            <div class="chart-container">
-                <div id="equity-{{ s.id }}"></div>
+            <!-- Metrics bar -->
+            <div class="metrics-bar">
+                <div class="metric-item">
+                    <div class="label">Sharpe</div>
+                    <div class="value {{ 'pnl-pos' if s.metrics.sharpe > 0 else 'pnl-neg' }}">{{ "%.2f"|format(s.metrics.sharpe) }}</div>
+                </div>
+                <div class="metric-item">
+                    <div class="label">PnL</div>
+                    <div class="value {{ 'pnl-pos' if s.metrics.cum_pnl > 0 else 'pnl-neg' }}">{{ fmt_pnl_pct(s.metrics.cum_pnl) }}</div>
+                </div>
+                <div class="metric-item">
+                    <div class="label">MaxDD</div>
+                    <div class="value pnl-neg">-{{ "%.1f"|format(s.metrics.max_dd * 100) }}%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="label">Calmar</div>
+                    <div class="value">{{ "%.1f"|format(s.metrics.calmar) }}</div>
+                </div>
+                <div class="metric-item">
+                    <div class="label">Win Rate</div>
+                    <div class="value">{{ "%.0f"|format(s.metrics.win_rate * 100) }}%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="label">Trades</div>
+                    <div class="value">{{ s.metrics.n_trades }}</div>
+                </div>
             </div>
-            <div class="chart-container" style="margin-top: 12px;">
-                <div id="position-{{ s.id }}"></div>
+
+            <!-- Live Performance (if available) -->
+            {% if s.live %}
+            <div class="metrics-bar" style="border-left: 3px solid #30d158;">
+                <div class="metric-item">
+                    <div class="label">LIVE</div>
+                    <div class="value" style="color: #30d158;">{{ s.live.n_days }} days</div>
+                </div>
+                <div class="metric-item">
+                    <div class="label">Live Sharpe</div>
+                    <div class="value {{ 'pnl-pos' if s.live.sharpe > 0 else 'pnl-neg' }}">{{ "%.2f"|format(s.live.sharpe) }}</div>
+                </div>
+                <div class="metric-item">
+                    <div class="label">Live PnL</div>
+                    <div class="value {{ 'pnl-pos' if s.live.cum_pnl > 0 else 'pnl-neg' }}">{{ fmt_pnl_pct(s.live.cum_pnl) }}</div>
+                </div>
+                <div class="metric-item">
+                    <div class="label">Live MaxDD</div>
+                    <div class="value pnl-neg">-{{ "%.1f"|format(s.live.max_dd * 100) }}%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="label">Period</div>
+                    <div class="value" style="font-size:13px;">{{ s.live.start }} → {{ s.live.end }}</div>
+                </div>
             </div>
+            {% endif %}
+
+            <!-- Equity + Drawdown -->
+            <div class="chart-box"><div id="equity-{{ s.id }}"></div></div>
+            <div class="grid-2">
+                <div class="chart-box"><div id="drawdown-{{ s.id }}"></div></div>
+                <div class="chart-box"><div id="rolling-{{ s.id }}"></div></div>
+            </div>
+
+            <!-- Daily PnL + Distribution -->
+            <div class="grid-2">
+                <div class="chart-box"><div id="daily-{{ s.id }}"></div></div>
+                <div class="chart-box"><div id="dist-{{ s.id }}"></div></div>
+            </div>
+
+            <!-- Monthly Heatmap + Position -->
+            <div class="grid-2">
+                <div class="chart-box"><div id="monthly-{{ s.id }}"></div></div>
+                <div class="chart-box"><div id="position-{{ s.id }}"></div></div>
+            </div>
+
+            <!-- Yearly table -->
+            {% if s.yearly %}
+            <table class="yearly-table">
+                <thead><tr><th>Year</th><th>Sharpe</th><th>PnL</th><th>Days</th></tr></thead>
+                <tbody>
+                {% for y in s.yearly %}
+                <tr>
+                    <td>{{ y.year }}</td>
+                    <td class="{{ 'pnl-pos' if y.sharpe > 0 else 'pnl-neg' }}">{{ "%.2f"|format(y.sharpe) }}</td>
+                    <td class="{{ 'pnl-pos' if y.pnl_pct > 0 else 'pnl-neg' }}">{{ "%+.1f"|format(y.pnl_pct) }}%</td>
+                    <td>{{ y.n_days }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
             {% else %}
             <div class="no-data">No trade log data. Run <code>causal-edge run --strategy {{ s.id }}</code></div>
             {% endif %}
@@ -126,10 +219,14 @@
             event.target.classList.add('active');
         }
 
-        // Render Plotly charts
         {% for s in strategies %}
         {% if s.has_data %}
         Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json }}.data, {{ s.equity_json }}.layout, {responsive: true});
+        Plotly.newPlot('drawdown-{{ s.id }}', {{ s.drawdown_json }}.data, {{ s.drawdown_json }}.layout, {responsive: true});
+        Plotly.newPlot('rolling-{{ s.id }}', {{ s.rolling_sharpe_json }}.data, {{ s.rolling_sharpe_json }}.layout, {responsive: true});
+        Plotly.newPlot('daily-{{ s.id }}', {{ s.daily_pnl_json }}.data, {{ s.daily_pnl_json }}.layout, {responsive: true});
+        Plotly.newPlot('dist-{{ s.id }}', {{ s.dist_json }}.data, {{ s.dist_json }}.layout, {responsive: true});
+        Plotly.newPlot('monthly-{{ s.id }}', {{ s.monthly_json }}.data, {{ s.monthly_json }}.layout, {responsive: true});
         Plotly.newPlot('position-{{ s.id }}', {{ s.position_json }}.data, {{ s.position_json }}.layout, {responsive: true});
         {% endif %}
         {% endfor %}

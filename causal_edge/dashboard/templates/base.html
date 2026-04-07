@@ -162,10 +162,41 @@
                     <div class="value pnl-neg">-{{ "%.1f"|format(s.live.max_dd * 100) }}%</div>
                 </div>
                 <div class="metric-item">
+                    <div class="label">Win Rate</div>
+                    <div class="value">{{ "%.0f"|format(s.live.win_rate * 100) }}%</div>
+                </div>
+                <div class="metric-item">
                     <div class="label">Period</div>
                     <div class="value" style="font-size:13px;">{{ s.live.start }} → {{ s.live.end }}</div>
                 </div>
             </div>
+
+            <!-- Live Trade Ledger -->
+            {% if s.live.ledger %}
+            <div class="chart-box">
+                <div style="font-size: 15px; font-weight: 600; color: #30d158; margin-bottom: 8px;">Live Trade Ledger</div>
+                <table style="font-size: 13px;">
+                    <thead><tr>
+                        <th>Date</th>
+                        <th>Position</th>
+                        {% if s.live.ledger[0].price is defined and s.live.ledger[0].price %}<th>Price</th>{% endif %}
+                        <th>Daily PnL</th>
+                        <th>Cumulative</th>
+                    </tr></thead>
+                    <tbody>
+                    {% for row in s.live.ledger %}
+                    <tr>
+                        <td>{{ row.date }}</td>
+                        <td>{% if row.position > 0.01 %}<span class="pnl-pos">{{ "%.2f"|format(row.position) }}</span>{% else %}<span style="color:#666;">FLAT</span>{% endif %}</td>
+                        {% if row.price %}<td style="font-family:monospace;">${{ "%.2f"|format(row.price) }}</td>{% endif %}
+                        <td class="{{ 'pnl-pos' if row.pnl_pct > 0 else 'pnl-neg' if row.pnl_pct < 0 else '' }}" style="font-family:monospace;">{{ "%+.3f"|format(row.pnl_pct) }}%</td>
+                        <td class="{{ 'pnl-pos' if row.cum_pct > 0 else 'pnl-neg' }}" style="font-family:monospace;">{{ "%+.2f"|format(row.cum_pct) }}%</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
             {% endif %}
 
             <!-- Equity + Drawdown -->

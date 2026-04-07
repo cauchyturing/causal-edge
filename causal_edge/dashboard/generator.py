@@ -49,6 +49,8 @@ def _prepare_strategy(s_cfg: dict) -> dict:
                  if "position" in df.columns else np.zeros(len(pnl)))
     source = (df["source"].values if "source" in df.columns
               else np.array(["backfill"] * len(pnl)))
+    asset_close = (df["asset_close"].values.astype(float)
+                   if "asset_close" in df.columns else None)
     dates = pd.DatetimeIndex(df["date"])
     cum_pnl = np.cumsum(pnl)
     name = s_cfg["name"]
@@ -88,7 +90,7 @@ def _prepare_strategy(s_cfg: dict) -> dict:
         "badge": s_cfg.get("badge", ""),
         "has_data": True,
         "metrics": compute_metrics(pnl),
-        "live": live_metrics(dates, pnl, source),
+        "live": live_metrics(dates, pnl, positions, source, asset_close),
         "validation": validation,
         "yearly": yearly_metrics(dates, pnl),
         # Charts (all JSON strings)

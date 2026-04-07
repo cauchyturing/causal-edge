@@ -88,16 +88,34 @@ def yearly_metrics(dates, pnl) -> list[dict]:
     return out
 
 
-def live_metrics(dates, pnl, source) -> dict | None:
-    """Compute metrics for live-only portion (source='live')."""
+def live_metrics(dates, pnl, positions, source, prices=None) -> dict | None:
+    """Compute metrics + trade ledger for live-only portion."""
     mask = np.array(source) == "live"
     if mask.sum() < 2:
         return None
     live_pnl = pnl[mask]
     live_dates = np.array(dates)[mask]
+    live_pos = np.array(positions)[mask]
     m = compute_metrics(live_pnl)
     m["start"] = str(pd.Timestamp(live_dates[0]).date())
     m["end"] = str(pd.Timestamp(live_dates[-1]).date())
+
+    # Trade ledger
+    ledger = []
+    cum = 0.0
+    for i in range(len(live_pnl)):
+        cum += live_pnl[i]
+        row = {
+            "date": str(pd.Timestamp(live_dates[i]).date()),
+            "position": round(float(live_pos[i]), 4),
+            "pnl_pct": round(float(live_pnl[i]) * 100, 3),
+            "cum_pct": round(cum * 100, 2),
+        }
+        if prices is not None:
+            live_px = np.array(prices)[mask]
+            row["price"] = round(float(live_px[i]), 2)
+        ledger.append(row)
+    m["ledger"] = ledger
     return m
 
 

@@ -89,12 +89,13 @@ def validate_strategy(
         "shape": metrics.get("omega", 0),
     }
 
-    # Count tests
-    total_tests = len(failures) + _count_passed(metrics, prof)
+    # Count tests (fixed denominator — same total regardless of pass/fail)
+    total_tests = _count_passed(metrics, prof)
+    passed_count = total_tests - len(failures)
 
     return {
         "verdict": "PASS" if passed else "FAIL",
-        "score": f"{total_tests - len(failures)}/{total_tests}",
+        "score": f"{passed_count}/{total_tests}",
         "failures": failures,
         "metrics": metrics,
         "triangle": triangle,
@@ -176,7 +177,7 @@ def print_validation_report(results: dict) -> None:
 
 
 def _count_passed(metrics: dict, profile: dict) -> int:
-    """Count total tests that could be run."""
+    """Count total tests that COULD be run (fixed denominator, independent of pass/fail)."""
     count = 9  # base: DSR, PBO, OOS/IS, NegRoll, LossYrs, Lo, Omega, MaxDD, PnLfloor
     count += 1  # Sharpe/Lo ratio
     count += 1  # Bootstrap

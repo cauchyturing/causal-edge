@@ -1,7 +1,7 @@
 PYTHON = python3
 PYTHONPATH = PYTHONPATH=.
 
-.PHONY: test test-struct test-valid test-cli lint fmt check verify-1
+.PHONY: test test-struct test-valid test-cli lint fmt check verify-1 dashboard status
 
 test:
 	$(PYTHONPATH) $(PYTHON) -m pytest tests/ -v
@@ -24,3 +24,9 @@ check:
 	$(PYTHON) -m ruff check .
 
 verify-1: test
+
+dashboard:
+	$(PYTHONPATH) $(PYTHON) -m causal_edge.cli dashboard
+
+status:
+	$(PYTHONPATH) $(PYTHON) -m causal_edge.cli status

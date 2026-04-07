@@ -235,5 +235,115 @@ def status(config):
         click.echo(f"  {s['name']:20s}  {s['asset']:6s}  {s.get('badge', '?')}")
 
 
+@main.group()
+def research():
+    """Autonomous research loop with L1 enforcement."""
+
+
+@research.command("init")
+@click.argument("ticker")
+@click.option("--workdir", default=None, help="Workspace directory")
+def research_init(ticker, workdir):
+    """Initialize research workspace for a ticker."""
+    from causal_edge.research.workspace import init_workspace
+
+    ws = init_workspace(ticker, workdir)
+    click.echo(f"Research workspace: {ws}/")
+    click.echo(f"  strategy.py  — fill in run_strategy()")
+    click.echo(f"  results.tsv  — experiment log (append-only)")
+    click.echo(f"  memory.md    — agent memory")
+    click.echo(f"  discovery.json — Abel parents")
+    click.echo()
+    click.echo("Next: edit strategy.py, then:")
+    click.echo(f"  causal-edge research run --workdir {ws}")
+
+
+@research.command("run")
+@click.option("--workdir", default=".", help="Research workspace dir")
+@click.option("--mode", default="exploit", type=click.Choice(["exploit", "explore"]))
+@click.option("--description", "-d", default="", help="Experiment description")
+def research_run(workdir, mode, description):
+    """Run strategy.py through the immutable evaluation harness."""
+    from pathlib import Path
+    from causal_edge.research.evaluate import run_evaluation, append_results_tsv
+
+    result = run_evaluation(workdir)
+
+    # Print result
+    import json
+    verdict = result.get("verdict", "ERROR")
+    score = result.get("score", "?/?")
+    K = result.get("K", "?")
+    tri = result.get("triangle", {})
+
+    click.echo(f"\n  Verdict: {verdict}")
+    click.echo(f"  Score:   {score}")
+    click.echo(f"  K:       {K} (auto-computed)")
+    click.echo(f"  Triangle: Lo={tri.get('ratio', 0):.2f}  "
+               f"IC={tri.get('rank', 0):.3f}  "
+               f"Om={tri.get('shape', 0):.2f}")
+
+    m = result.get("metrics", {})
+    if m:
+        click.echo(f"  Sharpe={m.get('sharpe', 0):.2f}  "
+                   f"MaxDD={m.get('max_dd', 0)*100:.1f}%  "
+                   f"PnL={m.get('total_pnl', 0)*100:.1f}%")
+
+    fails = result.get("failures", [])
+    if fails:
+        click.echo(f"\n  Failures:")
+        for f in fails:
+            click.echo(f"    - {f}")
+
+    # Determine status
+    if verdict == "PASS":
+        status = "keep"
+        click.echo(f"\n  PASS — recording as KEEP")
+    else:
+        status = "discard"
+        click.echo(f"\n  {verdict} — recording as DISCARD")
+
+    if not description:
+        description = f"{mode}: {verdict} {score}"
+
+    append_results_tsv(Path(workdir), result, status, mode, description)
+    click.echo(f"  Appended to results.tsv")
+
+
+@research.command("status")
+@click.option("--workdir", default=".", help="Research workspace dir")
+def research_status(workdir):
+    """Show research progress summary."""
+    from pathlib import Path
+    import csv
+
+    ws = Path(workdir)
+    tsv = ws / "results.tsv"
+    if not tsv.exists():
+        click.echo("No results.tsv found. Run 'causal-edge research init' first.")
+        return
+
+    rows = list(csv.DictReader(open(tsv), delimiter="\t"))
+    n_total = len(rows)
+    n_keep = sum(1 for r in rows if r.get("status") == "keep")
+    n_discard = n_total - n_keep
+
+    click.echo(f"  Experiments: {n_total} ({n_keep} keep, {n_discard} discard)")
+
+    if rows:
+        latest = rows[-1]
+        click.echo(f"  Latest: {latest.get('description', '?')} "
+                   f"[{latest.get('score', '?')}] {latest.get('status', '?')}")
+
+    keeps = [r for r in rows if r.get("status") == "keep"]
+    if keeps:
+        best = keeps[-1]
+        click.echo(f"  Baseline: Sharpe={best.get('sharpe', '?')} "
+                   f"Lo={best.get('lo_adj', '?')} "
+                   f"IC={best.get('ic', '?')} "
+                   f"K={best.get('K', '?')} "
+                   f"[{best.get('score', '?')}]")
+
+
 if __name__ == "__main__":
     main()

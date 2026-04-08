@@ -136,13 +136,14 @@ def execute_strategy(strategy_cfg: dict) -> SignalResult:
 
 
 def _load_engine(engine_path: str):
-    """Import engine module and find StrategyEngine subclass."""
+    """Import engine module and find StrategyEngine subclass defined in it."""
     mod = importlib.import_module(engine_path)
     from causal_edge.engine.base import StrategyEngine
     for attr_name in dir(mod):
         attr = getattr(mod, attr_name)
         if (isinstance(attr, type) and issubclass(attr, StrategyEngine)
-                and attr is not StrategyEngine):
+                and attr is not StrategyEngine
+                and attr.__module__ == mod.__name__):
             return attr
     raise ImportError(f"No StrategyEngine subclass in '{engine_path}'")
 

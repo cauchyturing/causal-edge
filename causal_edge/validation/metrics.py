@@ -340,28 +340,44 @@ def _bootstrap_sharpe(pnl, n_boot=1000):
 
 
 def _compute_ic(pnl, positions, dates):
-    """Compute IC (Spearman) and monthly stability."""
+    """Compute IC (Spearman of position vs return) and monthly stability.
+
+    IC = spearmanr(position, return), NOT spearmanr(position, pnl).
+    This avoids the pos² tautology: pnl = pos × ret, so corr(pos, pnl)
+    is inflated by the mechanical pos² correlation.
+
+    corr(pos, ret) measures genuine sizing skill — does larger position
+    predict larger return? Low IC ≠ bad strategy; it means timing skill
+    exists but sizing doesn't add information.
+    """
     active_mask = np.abs(positions) > 0.01
     if active_mask.sum() < 30:
         return 0.0, 0.0, 0.0, 0.0
 
-    ap, al = positions[active_mask], pnl[active_mask]
-    if np.std(ap) < 1e-10 or np.std(al) < 1e-10:
-        return 0.0, float(np.mean(np.sign(ap) == np.sign(al))), 0.0, 0.0
+    ap = positions[active_mask]
+    apnl = pnl[active_mask]
 
-    ic = float(sp_stats.spearmanr(ap, al)[0])
+    # Recover returns: ret = pnl / pos (where pos != 0)
+    safe_pos = np.where(np.abs(ap) > 1e-8, ap, 1.0)
+    aret = np.where(np.abs(ap) > 1e-8, apnl / safe_pos, 0.0)
+
+    hit_rate = float(np.mean(np.sign(ap) == np.sign(apnl)))
+
+    if np.std(ap) < 1e-10 or np.std(aret) < 1e-10:
+        return 0.0, hit_rate, 0.0, 0.0
+
+    ic = float(sp_stats.spearmanr(ap, aret)[0])
     if np.isnan(ic):
         ic = 0.0
-    hit_rate = float(np.mean(np.sign(ap) == np.sign(al)))
 
     ad = dates[active_mask]
     monthly_ics = []
     for ym in sorted(set(zip(ad.year, ad.month))):
         m = (ad.year == ym[0]) & (ad.month == ym[1])
         if m.sum() > 5:
-            mp, ml = ap[m], al[m]
-            if np.std(mp) > 1e-10 and np.std(ml) > 1e-10:
-                mic = float(sp_stats.spearmanr(mp, ml)[0])
+            mp, mr = ap[m], aret[m]
+            if np.std(mp) > 1e-10 and np.std(mr) > 1e-10:
+                mic = float(sp_stats.spearmanr(mp, mr)[0])
                 if not np.isnan(mic):
                     monthly_ics.append(mic)
 

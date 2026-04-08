@@ -101,7 +101,7 @@ def bto_search(
                 p[name] = trial.suggest_categorical(name, values)
             param_list.append(p)
 
-        results = Parallel(n_jobs=batch_size)(
+        results = Parallel(n_jobs=-1)(
             delayed(_eval_candidate)(
                 classifier_cls, p, cls_kwargs,
                 x_tr, y_tr, x_val, y_val, thresholds,

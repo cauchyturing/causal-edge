@@ -32,25 +32,42 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 # Defaults
 DEFAULT_BATCHES = 3
 DEFAULT_BATCH_SIZE = 5
-DEFAULT_THRESHOLDS = np.arange(0.35, 0.66, 0.01)
 
 
-def _eval_candidate(cls, params, cls_kwargs, x_tr, y_tr, x_val, y_val, thresholds):
+def _default_score_fn(clf, x_val, y_val, val_ret=None):
+    """Default: acc - 0.10 * brier. Threshold-free (uses best threshold)."""
+    raw_p = clf.predict_proba(x_val)[:, 1]
+    best_score, best_th = -np.inf, 0.5
+    for th in np.arange(0.35, 0.66, 0.01):
+        pred = (raw_p >= th).astype(int)
+        acc = np.mean(pred == y_val)
+        brier = np.mean((raw_p - y_val) ** 2)
+        score = acc - 0.10 * brier
+        if score > best_score:
+            best_score = score
+            best_th = th
+    return best_score, best_th
+
+
+def sharpe_score_fn(clf, x_val, y_val, val_ret=None):
+    """Sharpe-based scoring: optimize for risk-adjusted PnL on validation."""
+    raw_p = clf.predict_proba(x_val)[:, 1]
+    sig = np.where(raw_p > 0.5, 1, 0)
+    if val_ret is None:
+        return 0.0, 0.5
+    pnl = sig * val_ret[:len(sig)]
+    std = np.std(pnl, ddof=1) if len(pnl) > 1 else 0.0
+    score = float(np.mean(pnl) / std * np.sqrt(252)) if std > 0 else 0.0
+    return score, 0.5
+
+
+def _eval_candidate(cls, params, cls_kwargs, x_tr, y_tr, x_val, y_val,
+                    score_fn, val_ret):
     """Evaluate one classifier candidate. Returns (score, threshold)."""
     try:
         clf = cls(random_state=42, **cls_kwargs, **params)
         clf.fit(x_tr, y_tr)
-        raw_p = clf.predict_proba(x_val)[:, 1]
-        best_score, best_th = -np.inf, 0.5
-        for th in thresholds:
-            pred = (raw_p >= th).astype(int)
-            acc = np.mean(pred == y_val)
-            brier = np.mean((raw_p - y_val) ** 2)
-            score = acc - 0.10 * brier
-            if score > best_score:
-                best_score = score
-                best_th = th
-        return best_score, best_th
+        return score_fn(clf, x_val, y_val, val_ret)
     except Exception:
         return -np.inf, 0.5
 
@@ -65,8 +82,9 @@ def bto_search(
     n_batches: int = DEFAULT_BATCHES,
     batch_size: int = DEFAULT_BATCH_SIZE,
     seed: int = 42,
-    thresholds: np.ndarray = DEFAULT_THRESHOLDS,
     classifier_kwargs: dict | None = None,
+    score_fn=None,
+    val_ret: np.ndarray | None = None,
 ) -> tuple[dict, float]:
     """Bayesian batch optimization for classifier hyperparameters.
 
@@ -78,13 +96,16 @@ def bto_search(
         n_batches: number of Optuna rounds (default 3)
         batch_size: candidates per round (default 5)
         seed: random seed for TPE sampler
-        thresholds: decision threshold sweep values
         classifier_kwargs: fixed kwargs passed to classifier (e.g. early_stopping)
+        score_fn: callable(clf, x_val, y_val, val_ret) -> (score, threshold).
+                  Default: acc - 0.10 * brier. Use sharpe_score_fn for PnL-based.
+        val_ret: validation returns array (required for sharpe_score_fn)
 
     Returns:
         (best_params, best_threshold)
     """
     cls_kwargs = classifier_kwargs or {}
+    fn = score_fn or _default_score_fn
     sampler = optuna.samplers.TPESampler(seed=seed)
     study = optuna.create_study(direction="maximize", sampler=sampler)
 
@@ -104,7 +125,7 @@ def bto_search(
         results = Parallel(n_jobs=-1)(
             delayed(_eval_candidate)(
                 classifier_cls, p, cls_kwargs,
-                x_tr, y_tr, x_val, y_val, thresholds,
+                x_tr, y_tr, x_val, y_val, fn, val_ret,
             )
             for p in param_list
         )
@@ -117,7 +138,6 @@ def bto_search(
                 best_params = params
 
     if best_params is None:
-        # Fallback: first value of each param
         best_params = {k: v[0] for k, v in param_space.items()}
 
     return best_params, best_threshold

@@ -226,6 +226,14 @@
         <!-- Live Ledger: per-strategy daily detail -->
         <div class="section">
             <div class="section-title">Ledger</div>
+            <div class="ledger-row" style="border-bottom:1px solid var(--separator);padding-bottom:8px;">
+                <div class="ledger-strat" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Strategy</div>
+                <div class="ledger-action" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Action</div>
+                <div class="ledger-pos" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Size</div>
+                <div class="ledger-pnl" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">PnL</div>
+                <div class="ledger-cum" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Cum</div>
+                <div class="ledger-bar"></div>
+            </div>
             {% for day in portfolio.ledger %}
             <div class="ledger-date-header">{{ day.date }}{% if day.total_pnl != 0 %} <span class="{{ 'pos' if day.total_pnl > 0 else 'neg' }}" style="float:right;font-size:12px;font-family:'SF Mono',monospace;">{{ "%+.2f"|format(day.total_pnl * 100) }}%</span>{% endif %}</div>
             {% for entry in day.entries %}

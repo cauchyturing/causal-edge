@@ -3,338 +3,393 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>causal-edge dashboard</title>
+    <title>Trading Dashboard</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
+        :root {
+            --bg: #000000;
+            --card: #1c1c1e;
+            --elevated: #2c2c2e;
+            --separator: #38383a;
+            --label: #86868b;
+            --text: #f5f5f7;
+            --green: #30d158;
+            --red: #ff453a;
+            --blue: #0a84ff;
+            --orange: #ff9f0a;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #1a1a2e; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; }
-        .header { background: #16213e; padding: 16px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
-        .header h1 { font-size: 20px; font-weight: 600; color: #fff; }
-        .header .meta { font-size: 12px; color: #888; }
-        .tabs { display: flex; gap: 4px; padding: 8px 24px; background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap; }
-        .tab { padding: 8px 16px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 13px; color: #aaa; background: transparent; border: none; transition: all 0.2s; }
-        .tab:hover { color: #fff; background: #1a1a2e; }
-        .tab.active { color: #fff; background: #1a1a2e; border-bottom: 2px solid #0a84ff; }
-        .content { padding: 24px; max-width: 1400px; margin: 0 auto; }
-        .panel { display: none; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+        /* Navigation */
+        .nav { display: flex; justify-content: center; gap: 0; padding: 12px 24px; background: var(--card); border-bottom: 1px solid var(--separator); position: sticky; top: 0; z-index: 100; }
+        .nav-btn { padding: 8px 24px; font-size: 13px; font-weight: 500; color: var(--label); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; letter-spacing: 0.3px; }
+        .nav-btn:hover { color: var(--text); }
+        .nav-btn.active { color: var(--text); border-bottom-color: var(--blue); }
+
+        /* Panels */
+        .panel { display: none; padding: 32px 24px; max-width: 960px; margin: 0 auto; }
         .panel.active { display: block; }
+
+        /* Hero */
+        .hero { text-align: center; padding: 48px 0 32px; }
+        .hero-number { font-size: 56px; font-weight: 700; letter-spacing: -2px; line-height: 1; }
+        .hero-sub { font-size: 15px; color: var(--label); margin-top: 8px; font-weight: 400; }
+        .hero-row { display: flex; justify-content: center; gap: 48px; margin-top: 24px; }
+        .hero-stat { text-align: center; }
+        .hero-stat .val { font-size: 17px; font-weight: 600; }
+        .hero-stat .lbl { font-size: 11px; color: var(--label); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+        /* Signal table */
+        .section-title { font-size: 11px; font-weight: 600; color: var(--label); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--separator); }
+        .signal-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(56,56,58,0.4); }
+        .signal-row:last-child { border-bottom: none; }
+        .signal-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 12px; flex-shrink: 0; }
+        .signal-name { flex: 0 0 160px; font-size: 14px; font-weight: 500; }
+        .signal-bar-wrap { flex: 1; display: flex; align-items: center; gap: 8px; }
+        .signal-bar { height: 6px; border-radius: 3px; background: var(--green); opacity: 0.8; transition: width 0.3s; }
+        .signal-bar-bg { flex: 1; height: 6px; border-radius: 3px; background: var(--elevated); max-width: 120px; }
+        .signal-pos { font-size: 13px; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; color: var(--label); width: 48px; text-align: right; }
+        .signal-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(48,209,88,0.15); color: var(--green); margin-left: 8px; flex-shrink: 0; }
+        .signal-pnl { font-size: 14px; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; width: 80px; text-align: right; font-weight: 500; }
+        .signal-flat .signal-name { color: var(--label); font-weight: 400; }
+        .signal-flat .signal-pos { color: rgba(134,134,139,0.5); }
+        .flat-summary { padding: 10px 0; color: var(--label); font-size: 13px; padding-left: 20px; }
+
+        /* Recent days */
+        .recent-row { display: flex; align-items: center; padding: 8px 0; font-size: 13px; }
+        .recent-date { width: 80px; color: var(--label); font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; }
+        .recent-active { width: 90px; color: var(--label); }
+        .recent-pnl { width: 80px; text-align: right; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-weight: 500; }
+        .recent-spark { flex: 1; padding-left: 16px; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--label); letter-spacing: 1px; }
+
+        /* Section spacing */
+        .section { margin-top: 40px; }
+
+        /* Price badge */
+        .price-row { display: flex; justify-content: flex-end; gap: 16px; margin-bottom: 16px; }
+        .price-badge { font-size: 12px; color: var(--label); font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; }
+        .price-badge .ticker { color: var(--text); font-weight: 500; }
+
+        /* Portfolio table */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--separator); font-size: 10px; color: var(--label); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        th.num { text-align: right; }
+        td { padding: 10px 12px; border-bottom: 1px solid rgba(56,56,58,0.3); font-size: 14px; }
+        td.num { text-align: right; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 13px; }
+        tr:hover td { background: var(--card); }
+        tr { cursor: pointer; }
+        .pos { color: var(--green); }
+        .neg { color: var(--red); }
+        .muted { color: var(--label); }
+
+        /* Strategy detail */
+        .strat-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+        .strat-header h2 { font-size: 22px; font-weight: 600; }
+        .strat-header .asset { color: var(--label); font-size: 15px; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+        .badge-pass { background: rgba(48,209,88,0.12); color: var(--green); }
+        .badge-fail { background: rgba(255,69,58,0.12); color: var(--red); }
+
+        .metrics-bar { display: flex; gap: 32px; flex-wrap: wrap; padding: 16px 20px; background: var(--card); border-radius: 12px; margin-bottom: 16px; }
+        .metric { text-align: center; }
+        .metric .lbl { font-size: 10px; color: var(--label); text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric .val { font-size: 20px; font-weight: 600; margin-top: 2px; }
+
+        .chart-box { background: var(--card); border-radius: 12px; padding: 16px; margin-top: 12px; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
-        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-        th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #0f3460; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: 10px 12px; border-bottom: 1px solid #1e2a4a; font-size: 14px; }
-        tr:hover td { background: #16213e; }
-        .pnl-pos { color: #30d158; }
-        .pnl-neg { color: #ff453a; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-        .badge-pass { background: #30d15820; color: #30d158; }
-        .badge-fail { background: #ff453a20; color: #ff453a; }
-        .chart-box { background: #16213e; border-radius: 8px; padding: 16px; margin-top: 12px; }
-        .strategy-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-        .strategy-header .dot { width: 12px; height: 12px; border-radius: 50%; }
-        .strategy-header h2 { font-size: 18px; }
-        .metrics-bar { display: flex; gap: 24px; flex-wrap: wrap; padding: 12px 16px; background: #16213e; border-radius: 8px; margin-bottom: 12px; }
-        .metric-item { text-align: center; }
-        .metric-item .label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-        .metric-item .value { font-size: 18px; font-weight: 600; color: #fff; }
+
         .yearly-table { margin-top: 12px; }
         .yearly-table td { padding: 6px 10px; font-size: 13px; }
-        .yearly-table th { font-size: 10px; }
-        .no-data { text-align: center; padding: 60px; color: #666; }
+
+        /* Validation */
+        .val-triangle { display: flex; gap: 32px; margin-bottom: 16px; }
+        .val-table td { font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 13px; }
+        .val-failures { margin-top: 12px; padding: 8px 12px; background: rgba(255,69,58,0.06); border-radius: 8px; }
+        .val-failures div { font-size: 13px; color: var(--red); font-family: monospace; }
+
+        /* Strategy selector */
+        .strat-select { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 24px; }
+        .strat-btn { padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--label); background: var(--card); border: 1px solid var(--separator); cursor: pointer; transition: all 0.15s; }
+        .strat-btn:hover { border-color: var(--label); color: var(--text); }
+        .strat-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+        /* Live/BT health indicator */
+        .health { letter-spacing: 2px; }
+        .health-good { color: var(--green); }
+        .health-warn { color: var(--orange); }
+        .health-bad { color: var(--red); }
+
+        /* Stale warning */
+        .stale-warn { color: var(--orange); font-size: 12px; }
+
+        .no-data { text-align: center; padding: 60px; color: var(--label); }
+
+        /* Transitions */
+        .panel { animation: fadeIn 0.15s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>causal-edge</h1>
-        <div class="meta">Generated {{ generated_at }}</div>
-    </div>
+    <!-- Navigation -->
+    <nav class="nav">
+        <button class="nav-btn active" onclick="showPage('live')">Live</button>
+        <button class="nav-btn" onclick="showPage('portfolio')">Portfolio</button>
+        <button class="nav-btn" onclick="showPage('strategy')">Strategy</button>
+    </nav>
 
-    <div class="tabs">
-        <button class="tab active" onclick="showTab('overview')">Overview</button>
-        {% for s in strategies %}
-        <button class="tab" onclick="showTab('{{ s.id }}')" style="border-left: 3px solid {{ s.color }}">
-            {{ s.name }}
-        </button>
-        {% endfor %}
-    </div>
+    <!-- ═══════════════ PAGE 1: LIVE ═══════════════ -->
+    <div id="page-live" class="panel active">
+        <!-- Hero -->
+        <div class="hero">
+            <div class="hero-number {{ 'pos' if portfolio.mtd_pnl >= 0 else 'neg' }}">
+                {{ "%+.2f"|format(portfolio.mtd_pnl * 100) }}%
+            </div>
+            <div class="hero-sub">month to date</div>
+            <div class="hero-row">
+                <div class="hero-stat">
+                    <div class="val {{ 'pos' if portfolio.today_pnl >= 0 else 'neg' }}">{{ "%+.2f"|format(portfolio.today_pnl * 100) }}%</div>
+                    <div class="lbl">today</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="val {{ 'pos' if portfolio.total_pnl >= 0 else 'neg' }}">{{ "%+.1f"|format(portfolio.total_pnl * 100) }}%</div>
+                    <div class="lbl">total</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="val">{{ portfolio.n_active }}/{{ portfolio.n_strats }}</div>
+                    <div class="lbl">active</div>
+                </div>
+            </div>
+        </div>
 
-    <div class="content">
-        <!-- Overview Panel -->
-        <div id="panel-overview" class="panel active">
-            {% if strategies %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Strategy</th>
-                        <th>Asset</th>
-                        <th>Sharpe</th>
-                        <th>PnL</th>
-                        <th>MaxDD</th>
-                        <th>Calmar</th>
-                        <th>Win Rate</th>
-                        <th>Days</th>
-                        <th>Live</th>
-                        <th>Badge</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for s in strategies %}
-                    <tr onclick="showTab('{{ s.id }}')" style="cursor:pointer;">
-                        <td><span style="color: {{ s.color }}">&#9679;</span> {{ s.name }}</td>
-                        <td>{{ s.asset }}</td>
-                        {% if s.has_data %}
-                        <td class="{{ 'pnl-pos' if s.metrics.sharpe > 0 else 'pnl-neg' }}">{{ "%.2f"|format(s.metrics.sharpe) }}</td>
-                        <td class="{{ 'pnl-pos' if s.metrics.cum_pnl > 0 else 'pnl-neg' }}">{{ fmt_pnl_pct(s.metrics.cum_pnl) }}</td>
-                        <td class="pnl-neg">-{{ "%.1f"|format(s.metrics.max_dd * 100) }}%</td>
-                        <td>{{ "%.1f"|format(s.metrics.calmar) }}</td>
-                        <td>{{ "%.0f"|format(s.metrics.win_rate * 100) }}%</td>
-                        <td>{{ s.metrics.n_days }}</td>
-                        <td>{% if s.live %}<span class="pnl-pos">{{ s.live.n_days }}d {{ "%.2f"|format(s.live.sharpe) }}</span>{% else %}<span style="color:#666;">—</span>{% endif %}</td>
-                        <td>{% if s.validation %}<span class="badge {{ 'badge-pass' if s.validation.verdict == 'PASS' else 'badge-fail' }}">{{ s.validation.score }}</span>{% elif s.badge %}<span class="badge badge-pass">{{ s.badge }}</span>{% endif %}</td>
-                        {% else %}
-                        <td colspan="8" style="color: #666;">No data — <code>causal-edge run</code></td>
-                        {% endif %}
-                    </tr>
+        <!-- Signals -->
+        <div class="section">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                <div class="section-title">Signals</div>
+                <div>
+                    {% for ticker, price in portfolio.prices.items() %}
+                    <span class="price-badge"><span class="ticker">{{ ticker }}</span> ${{ "%.2f"|format(price) }}</span>&nbsp;&nbsp;
                     {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="no-data">No strategies configured.</div>
+                </div>
+            </div>
+            {% for sig in portfolio.signals_active %}
+            <div class="signal-row">
+                <div class="signal-dot" style="background: {{ sig.color }};"></div>
+                <div class="signal-name">{{ sig.name }}</div>
+                <div class="signal-bar-wrap">
+                    <div class="signal-bar-bg"><div class="signal-bar" style="width: {{ (sig.position * 100)|int }}%;"></div></div>
+                </div>
+                <div class="signal-pos">{{ "%.2f"|format(sig.position) }}</div>
+                {% if sig.changed %}<div class="signal-badge">NEW</div>{% endif %}
+                <div class="signal-pnl {{ 'pos' if sig.today_pnl > 0 else 'neg' if sig.today_pnl < 0 else 'muted' }}">{{ "%+.2f"|format(sig.today_pnl * 100) }}%</div>
+            </div>
+            {% endfor %}
+            {% if portfolio.n_flat > 0 %}
+            <div class="flat-summary">{{ portfolio.n_flat }} flat</div>
             {% endif %}
         </div>
 
-        <!-- Per-strategy Panels -->
+        <!-- Recent days -->
+        <div class="section">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                <div class="section-title">Recent</div>
+                <span class="{{ 'stale-warn' if portfolio.stale_hours > 24 else 'muted' }}" style="font-size:11px;">
+                    updated {{ portfolio.stale_label }}
+                </span>
+            </div>
+            {% for day in portfolio.recent_days %}
+            <div class="recent-row">
+                <div class="recent-date">{{ day.date }}</div>
+                <div class="recent-active">{{ day.n_active }} active</div>
+                <div class="recent-pnl {{ 'pos' if day.pnl > 0 else 'neg' if day.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(day.pnl * 100) }}%</div>
+                <div class="recent-spark">{{ day.spark }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- ═══════════════ PAGE 2: PORTFOLIO ═══════════════ -->
+    <div id="page-portfolio" class="panel">
+        <table>
+            <thead><tr>
+                <th>Strategy</th>
+                <th>Asset</th>
+                <th class="num">Sharpe</th>
+                <th class="num">Lo</th>
+                <th class="num">IC</th>
+                <th class="num">Omega</th>
+                <th class="num">MaxDD</th>
+                <th class="num">PnL</th>
+                <th>Health</th>
+                <th>Score</th>
+            </tr></thead>
+            <tbody>
+                {% for s in strategies %}
+                <tr onclick="showStrategy('{{ s.id }}')">
+                    <td><span style="color: {{ s.color }}; font-size: 8px;">&#9679;</span>&nbsp; {{ s.name }}</td>
+                    <td class="muted">{{ s.asset }}</td>
+                    {% if s.has_data %}
+                    <td class="num {{ 'pos' if s.metrics.sharpe > 0 else 'neg' }}">{{ "%.2f"|format(s.metrics.sharpe) }}</td>
+                    <td class="num">{% if s.validation and s.validation.metrics.lo_adjusted is defined %}{{ "%.2f"|format(s.validation.metrics.lo_adjusted) }}{% else %}—{% endif %}</td>
+                    <td class="num">{% if s.validation and s.validation.metrics.ic is defined %}{{ "%.3f"|format(s.validation.metrics.ic) }}{% else %}—{% endif %}</td>
+                    <td class="num">{% if s.validation and s.validation.metrics.omega is defined %}{{ "%.1f"|format(s.validation.metrics.omega) }}{% else %}—{% endif %}</td>
+                    <td class="num neg">{{ "%.1f"|format(s.metrics.max_dd * -100) }}%</td>
+                    <td class="num {{ 'pos' if s.metrics.cum_pnl > 0 else 'neg' }}">{{ fmt_pnl_pct(s.metrics.cum_pnl) }}</td>
+                    <td><span class="health {{ s.health_class }}">{{ s.health_dots }}</span></td>
+                    <td>{% if s.validation %}<span class="badge {{ 'badge-pass' if s.validation.verdict == 'PASS' else 'badge-fail' }}">{{ s.validation.score }}</span>{% endif %}</td>
+                    {% else %}
+                    <td colspan="8" class="muted">no data</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ═══════════════ PAGE 3: STRATEGY ═══════════════ -->
+    <div id="page-strategy" class="panel">
+        <div class="strat-select">
+            {% for s in strategies %}
+            <button class="strat-btn" onclick="showStrategyDetail('{{ s.id }}')" id="btn-{{ s.id }}" style="border-left: 3px solid {{ s.color }};">{{ s.name }}</button>
+            {% endfor %}
+        </div>
+
         {% for s in strategies %}
-        <div id="panel-{{ s.id }}" class="panel">
-            <div class="strategy-header">
-                <div class="dot" style="background: {{ s.color }}"></div>
+        <div id="detail-{{ s.id }}" class="strat-detail" style="display:none;">
+            <div class="strat-header">
+                <div class="signal-dot" style="background: {{ s.color }}; width: 12px; height: 12px;"></div>
                 <h2>{{ s.name }}</h2>
-                <span style="color: #888;">{{ s.asset }}</span>
-                {% if s.badge %}<span class="badge badge-pass">{{ s.badge }}</span>{% endif %}
+                <span class="asset">{{ s.asset }}</span>
+                {% if s.validation %}<span class="badge {{ 'badge-pass' if s.validation.verdict == 'PASS' else 'badge-fail' }}">{{ s.validation.score }} {{ s.validation.verdict }}</span>{% endif %}
             </div>
 
             {% if s.has_data %}
-            <!-- Metrics bar -->
             <div class="metrics-bar">
-                <div class="metric-item">
-                    <div class="label">Sharpe</div>
-                    <div class="value {{ 'pnl-pos' if s.metrics.sharpe > 0 else 'pnl-neg' }}">{{ "%.2f"|format(s.metrics.sharpe) }}</div>
+                {% for lbl, key, fmt in [("Sharpe", "sharpe", "%.2f"), ("PnL", "cum_pnl", None), ("MaxDD", "max_dd", None), ("Calmar", "calmar", "%.1f"), ("Win Rate", "win_rate", None), ("Days", "n_days", "%d")] %}
+                <div class="metric">
+                    <div class="lbl">{{ lbl }}</div>
+                    <div class="val {% if key == 'cum_pnl' %}{{ 'pos' if s.metrics[key] > 0 else 'neg' }}{% elif key == 'max_dd' %}neg{% endif %}">
+                        {% if key == 'cum_pnl' %}{{ fmt_pnl_pct(s.metrics[key]) }}{% elif key == 'max_dd' %}-{{ "%.1f"|format(s.metrics[key] * 100) }}%{% elif key == 'win_rate' %}{{ "%.0f"|format(s.metrics[key] * 100) }}%{% elif fmt %}{{ fmt|format(s.metrics[key]) }}{% else %}{{ s.metrics[key] }}{% endif %}
+                    </div>
                 </div>
-                <div class="metric-item">
-                    <div class="label">PnL</div>
-                    <div class="value {{ 'pnl-pos' if s.metrics.cum_pnl > 0 else 'pnl-neg' }}">{{ fmt_pnl_pct(s.metrics.cum_pnl) }}</div>
-                </div>
-                <div class="metric-item">
-                    <div class="label">MaxDD</div>
-                    <div class="value pnl-neg">-{{ "%.1f"|format(s.metrics.max_dd * 100) }}%</div>
-                </div>
-                <div class="metric-item">
-                    <div class="label">Calmar</div>
-                    <div class="value">{{ "%.1f"|format(s.metrics.calmar) }}</div>
-                </div>
-                <div class="metric-item">
-                    <div class="label">Win Rate</div>
-                    <div class="value">{{ "%.0f"|format(s.metrics.win_rate * 100) }}%</div>
-                </div>
-                <div class="metric-item">
-                    <div class="label">Trades</div>
-                    <div class="value">{{ s.metrics.n_trades }}</div>
-                </div>
+                {% endfor %}
             </div>
 
-            <!-- Live Performance (if available) -->
+            {% if s.validation %}
+            <div class="metrics-bar" style="border-left: 3px solid var(--blue);">
+                {% for lbl, val in [("Lo-adjusted", s.validation.metrics.get("lo_adjusted", 0)), ("IC", s.validation.metrics.get("ic", 0)), ("Omega", s.validation.metrics.get("omega", 0)), ("DSR", s.validation.metrics.get("dsr", 0)), ("PBO", s.validation.metrics.get("pbo", 0)), ("OOS/IS", s.validation.metrics.get("oos_is", 0))] %}
+                <div class="metric">
+                    <div class="lbl">{{ lbl }}</div>
+                    <div class="val">{% if lbl in ('DSR', 'PBO') %}{{ "%.0f"|format(val * 100) }}%{% else %}{{ "%.3f"|format(val) }}{% endif %}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             {% if s.live %}
-            <div class="metrics-bar" style="border-left: 3px solid #30d158;">
-                <div class="metric-item">
-                    <div class="label">LIVE</div>
-                    <div class="value" style="color: #30d158;">{{ s.live.n_days }} days</div>
-                </div>
-                <div class="metric-item">
-                    <div class="label">Live Sharpe</div>
-                    <div class="value {{ 'pnl-pos' if s.live.sharpe > 0 else 'pnl-neg' }}">{{ "%.2f"|format(s.live.sharpe) }}</div>
-                </div>
-                <div class="metric-item">
-                    <div class="label">Live PnL</div>
-                    <div class="value {{ 'pnl-pos' if s.live.cum_pnl > 0 else 'pnl-neg' }}">{{ fmt_pnl_pct(s.live.cum_pnl) }}</div>
-                </div>
-                <div class="metric-item">
-                    <div class="label">Live MaxDD</div>
-                    <div class="value pnl-neg">-{{ "%.1f"|format(s.live.max_dd * 100) }}%</div>
-                </div>
-                <div class="metric-item">
-                    <div class="label">Win Rate</div>
-                    <div class="value">{{ "%.0f"|format(s.live.win_rate * 100) }}%</div>
-                </div>
-                <div class="metric-item">
-                    <div class="label">Period</div>
-                    <div class="value" style="font-size:13px;">{{ s.live.start }} → {{ s.live.end }}</div>
-                </div>
-            </div>
-
-            <!-- Live Trade Ledger -->
-            {% if s.live.ledger %}
-            <div class="chart-box">
-                <div style="font-size: 15px; font-weight: 600; color: #30d158; margin-bottom: 8px;">Live Trade Ledger</div>
-                <table style="font-size: 13px;">
-                    <thead><tr>
-                        <th>Date</th>
-                        <th>Position</th>
-                        {% if s.live.ledger[0].price is defined and s.live.ledger[0].price %}<th>Price</th>{% endif %}
-                        <th>Daily PnL</th>
-                        <th>Cumulative</th>
-                    </tr></thead>
-                    <tbody>
-                    {% for row in s.live.ledger %}
-                    <tr>
-                        <td>{{ row.date }}</td>
-                        <td>{% if row.position > 0.01 %}<span class="pnl-pos">{{ "%.2f"|format(row.position) }}</span>{% else %}<span style="color:#666;">FLAT</span>{% endif %}</td>
-                        {% if row.price %}<td style="font-family:monospace;">${{ "%.2f"|format(row.price) }}</td>{% endif %}
-                        <td class="{{ 'pnl-pos' if row.pnl_pct > 0 else 'pnl-neg' if row.pnl_pct < 0 else '' }}" style="font-family:monospace;">{{ "%+.3f"|format(row.pnl_pct) }}%</td>
-                        <td class="{{ 'pnl-pos' if row.cum_pct > 0 else 'pnl-neg' }}" style="font-family:monospace;">{{ "%+.2f"|format(row.cum_pct) }}%</td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+            <div class="metrics-bar" style="border-left: 3px solid var(--green);">
+                <div class="metric"><div class="lbl">Live</div><div class="val pos">{{ s.live.n_days }}d</div></div>
+                <div class="metric"><div class="lbl">Live Sharpe</div><div class="val {{ 'pos' if s.live.sharpe > 0 else 'neg' }}">{{ "%.2f"|format(s.live.sharpe) }}</div></div>
+                <div class="metric"><div class="lbl">Live PnL</div><div class="val {{ 'pos' if s.live.cum_pnl > 0 else 'neg' }}">{{ fmt_pnl_pct(s.live.cum_pnl) }}</div></div>
+                <div class="metric"><div class="lbl">Period</div><div class="val" style="font-size:13px;">{{ s.live.start }} → {{ s.live.end }}</div></div>
             </div>
             {% endif %}
-            {% endif %}
 
-            <!-- Equity + Drawdown -->
             <div class="chart-box"><div id="equity-{{ s.id }}"></div></div>
             <div class="grid-2">
                 <div class="chart-box"><div id="drawdown-{{ s.id }}"></div></div>
                 <div class="chart-box"><div id="rolling-{{ s.id }}"></div></div>
             </div>
-
-            <!-- Daily PnL + Distribution -->
             <div class="grid-2">
                 <div class="chart-box"><div id="daily-{{ s.id }}"></div></div>
-                <div class="chart-box"><div id="dist-{{ s.id }}"></div></div>
-            </div>
-
-            <!-- Monthly Heatmap + Position -->
-            <div class="grid-2">
                 <div class="chart-box"><div id="monthly-{{ s.id }}"></div></div>
-                <div class="chart-box"><div id="position-{{ s.id }}"></div></div>
             </div>
 
-            <!-- Validation (15-test) -->
-            {% if s.validation %}
-            <div class="chart-box" style="margin-top: 12px;">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                    <span style="font-size: 15px; font-weight: 600; color: #fff;">Abel Proof Validation</span>
-                    <span class="badge {{ 'badge-pass' if s.validation.verdict == 'PASS' else 'badge-fail' }}">
-                        {{ s.validation.score }} {{ s.validation.verdict }}
-                    </span>
-                </div>
-
-                <!-- Triangle -->
-                {% set tri = s.validation.triangle %}
-                <div style="display: flex; gap: 32px; margin-bottom: 16px;">
-                    <div class="metric-item">
-                        <div class="label">Lo-adjusted (Ratio)</div>
-                        <div class="value {{ 'pnl-pos' if tri.ratio > 1 else 'pnl-neg' }}">{{ "%.3f"|format(tri.ratio) }}</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="label">IC (Rank)</div>
-                        <div class="value {{ 'pnl-pos' if tri.rank > 0 else 'pnl-neg' }}">{{ "%.4f"|format(tri.rank) }}</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="label">Omega (Shape)</div>
-                        <div class="value {{ 'pnl-pos' if tri.shape > 1 else 'pnl-neg' }}">{{ "%.3f"|format(tri.shape) }}</div>
-                    </div>
-                </div>
-
-                <!-- Full metrics table -->
-                <table style="font-size: 13px;">
-                    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-                    <tbody>
-                    {% set vm = s.validation.metrics %}
-                    {% for label, key, is_pct in [
-                        ("Sharpe", "sharpe", false),
-                        ("Lo-adjusted Sharpe", "lo_adjusted", false),
-                        ("Sortino", "sortino", false),
-                        ("IC", "ic", false),
-                        ("IC Stability", "ic_stability", true),
-                        ("IC Hit Rate", "ic_hit_rate", true),
-                        ("Omega", "omega", false),
-                        ("DSR", "dsr", true),
-                        ("PBO", "pbo", true),
-                        ("OOS/IS", "oos_is", false),
-                        ("MaxDD", "max_dd", true),
-                        ("Neg Rolling", "neg_roll_frac", true),
-                        ("Loss Years", "loss_years", false),
-                        ("Bootstrap p", "bootstrap_p", false),
-                        ("Sharpe/Lo Ratio", "sharpe_lo_ratio", false),
-                        ("Total PnL", "total_pnl", true),
-                        ("Calmar", "calmar", false),
-                    ] %}
-                    {% if key in vm %}
-                    <tr>
-                        <td>{{ label }}</td>
-                        <td style="font-family: monospace;">
-                        {% if is_pct %}{{ "%.1f"|format(vm[key] * 100) }}%{% elif key == "loss_years" %}{{ vm[key] }}{% else %}{{ "%.4f"|format(vm[key]) }}{% endif %}
-                        </td>
-                    </tr>
-                    {% endif %}
-                    {% endfor %}
-                    </tbody>
-                </table>
-
-                {% if s.validation.failures %}
-                <div style="margin-top: 12px; padding: 8px 12px; background: #ff453a10; border-radius: 6px;">
-                    <div style="font-size: 11px; color: #ff453a; text-transform: uppercase; margin-bottom: 4px;">Failures</div>
-                    {% for f in s.validation.failures %}
-                    <div style="font-size: 13px; color: #ff453a; font-family: monospace;">{{ f }}</div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            <!-- Yearly table -->
             {% if s.yearly %}
-            <table class="yearly-table">
-                <thead><tr><th>Year</th><th>Sharpe</th><th>PnL</th><th>Days</th></tr></thead>
+            <table class="yearly-table" style="margin-top:12px;">
+                <thead><tr><th>Year</th><th class="num">Sharpe</th><th class="num">PnL</th><th class="num">Days</th></tr></thead>
                 <tbody>
                 {% for y in s.yearly %}
                 <tr>
                     <td>{{ y.year }}</td>
-                    <td class="{{ 'pnl-pos' if y.sharpe > 0 else 'pnl-neg' }}">{{ "%.2f"|format(y.sharpe) }}</td>
-                    <td class="{{ 'pnl-pos' if y.pnl_pct > 0 else 'pnl-neg' }}">{{ "%+.1f"|format(y.pnl_pct) }}%</td>
-                    <td>{{ y.n_days }}</td>
+                    <td class="num {{ 'pos' if y.sharpe > 0 else 'neg' }}">{{ "%.2f"|format(y.sharpe) }}</td>
+                    <td class="num {{ 'pos' if y.pnl_pct > 0 else 'neg' }}">{{ "%+.1f"|format(y.pnl_pct) }}%</td>
+                    <td class="num muted">{{ y.n_days }}</td>
                 </tr>
                 {% endfor %}
                 </tbody>
             </table>
             {% endif %}
 
+            {% if s.live and s.live.ledger %}
+            <div class="chart-box" style="margin-top:12px;">
+                <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:8px;">Live Ledger</div>
+                <table style="font-size:13px;">
+                    <thead><tr><th>Date</th><th>Position</th>{% if s.live.ledger[0].price is defined and s.live.ledger[0].price %}<th class="num">Price</th>{% endif %}<th class="num">PnL</th><th class="num">Cum</th></tr></thead>
+                    <tbody>
+                    {% for row in s.live.ledger[-20:] %}
+                    <tr>
+                        <td class="muted">{{ row.date }}</td>
+                        <td>{% if row.position > 0.01 %}<span class="pos">{{ "%.2f"|format(row.position) }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+                        {% if row.price %}<td class="num">${{ "%.2f"|format(row.price) }}</td>{% endif %}
+                        <td class="num {{ 'pos' if row.pnl_pct > 0 else 'neg' if row.pnl_pct < 0 else '' }}">{{ "%+.3f"|format(row.pnl_pct) }}%</td>
+                        <td class="num {{ 'pos' if row.cum_pct > 0 else 'neg' }}">{{ "%+.2f"|format(row.cum_pct) }}%</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
             {% else %}
-            <div class="no-data">No trade log data. Run <code>causal-edge run --strategy {{ s.id }}</code></div>
+            <div class="no-data">No data. Run <code>causal-edge run --strategy {{ s.id }}</code></div>
             {% endif %}
         </div>
         {% endfor %}
     </div>
 
     <script>
-        function showTab(id) {
+        function showPage(id) {
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.getElementById('panel-' + id).classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('page-' + id).classList.add('active');
             event.target.classList.add('active');
+            if (id === 'strategy') initCharts();
         }
-
-        {% for s in strategies %}
-        {% if s.has_data %}
-        Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json }}.data, {{ s.equity_json }}.layout, {responsive: true});
-        Plotly.newPlot('drawdown-{{ s.id }}', {{ s.drawdown_json }}.data, {{ s.drawdown_json }}.layout, {responsive: true});
-        Plotly.newPlot('rolling-{{ s.id }}', {{ s.rolling_sharpe_json }}.data, {{ s.rolling_sharpe_json }}.layout, {responsive: true});
-        Plotly.newPlot('daily-{{ s.id }}', {{ s.daily_pnl_json }}.data, {{ s.daily_pnl_json }}.layout, {responsive: true});
-        Plotly.newPlot('dist-{{ s.id }}', {{ s.dist_json }}.data, {{ s.dist_json }}.layout, {responsive: true});
-        Plotly.newPlot('monthly-{{ s.id }}', {{ s.monthly_json }}.data, {{ s.monthly_json }}.layout, {responsive: true});
-        Plotly.newPlot('position-{{ s.id }}', {{ s.position_json }}.data, {{ s.position_json }}.layout, {responsive: true});
+        function showStrategy(id) {
+            showPage('strategy');
+            showStrategyDetail(id);
+            document.querySelectorAll('.nav-btn')[2].classList.add('active');
+        }
+        function showStrategyDetail(id) {
+            document.querySelectorAll('.strat-detail').forEach(d => d.style.display = 'none');
+            document.querySelectorAll('.strat-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('detail-' + id).style.display = 'block';
+            document.getElementById('btn-' + id).classList.add('active');
+            initCharts();
+        }
+        var chartsLoaded = {};
+        function initCharts() {
+            {% for s in strategies %}
+            {% if s.has_data %}
+            if (!chartsLoaded['{{ s.id }}'] && document.getElementById('detail-{{ s.id }}').style.display !== 'none') {
+                Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json }}.data, {{ s.equity_json }}.layout, {responsive:true,displayModeBar:false});
+                Plotly.newPlot('drawdown-{{ s.id }}', {{ s.drawdown_json }}.data, {{ s.drawdown_json }}.layout, {responsive:true,displayModeBar:false});
+                Plotly.newPlot('rolling-{{ s.id }}', {{ s.rolling_sharpe_json }}.data, {{ s.rolling_sharpe_json }}.layout, {responsive:true,displayModeBar:false});
+                Plotly.newPlot('daily-{{ s.id }}', {{ s.daily_pnl_json }}.data, {{ s.daily_pnl_json }}.layout, {responsive:true,displayModeBar:false});
+                Plotly.newPlot('monthly-{{ s.id }}', {{ s.monthly_json }}.data, {{ s.monthly_json }}.layout, {responsive:true,displayModeBar:false});
+                chartsLoaded['{{ s.id }}'] = true;
+            }
+            {% endif %}
+            {% endfor %}
+        }
+        // Show first strategy by default when switching to strategy page
+        {% if strategies %}
+        document.addEventListener('DOMContentLoaded', function() {
+            showStrategyDetail('{{ strategies[0].id }}');
+        });
         {% endif %}
-        {% endfor %}
     </script>
 </body>
 </html>

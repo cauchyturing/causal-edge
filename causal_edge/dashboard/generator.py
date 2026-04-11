@@ -287,6 +287,46 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         stale_hours = 999
         stale_label = "unknown"
 
+    # Live performance summary per strategy
+    live_perf = []
+    for s in strategies:
+        if not s["has_data"]:
+            continue
+        cfg_match = next(
+            (sc for sc in _strat_cfgs if sc["id"] == s["id"]), None,
+        )
+        if not cfg_match:
+            continue
+        df = _load_trade_log(cfg_match["trade_log"])
+        if df is None or "source" not in df.columns:
+            continue
+        live = df[df["source"] == "live"]
+        if len(live) < 2:
+            continue
+        lp = live["pnl"].values.astype(float)
+        lpos = live["position"].values.astype(float) if "position" in live.columns else np.zeros(len(lp))
+        cum = np.cumsum(lp)
+        eq = np.exp(cum)
+        peak = np.maximum.accumulate(eq)
+        dd = (peak - eq) / peak
+        max_dd = float(np.max(dd)) if len(dd) > 0 else 0
+        std = np.std(lp, ddof=1) if len(lp) > 1 else 0
+        sharpe = float(np.mean(lp) / std * np.sqrt(252)) if std > 0 else 0
+        active = lp[np.abs(lp) > 1e-10]
+        win_rate = float(np.mean(active > 0)) if len(active) > 0 else 0
+        live_perf.append({
+            "name": s["name"],
+            "color": s["color"],
+            "id": s["id"],
+            "days": len(lp),
+            "sharpe": round(sharpe, 2),
+            "pnl": round(float(cum[-1]), 4),
+            "max_dd": round(max_dd, 4),
+            "win_rate": round(win_rate, 3),
+            "active_days": int(np.sum(np.abs(lpos) > 0.01)),
+        })
+    live_perf.sort(key=lambda x: x["sharpe"], reverse=True)
+
     # Ledger: per-strategy daily detail for last 14 live days
     ledger = []
     # Collect all live rows per strategy
@@ -393,6 +433,7 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         "prices": prices,
         "stale_hours": stale_hours,
         "stale_label": stale_label,
+        "live_perf": live_perf,
         "ledger": ledger,
     }
 

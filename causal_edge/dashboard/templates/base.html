@@ -223,6 +223,37 @@
             {% endfor %}
         </div>
 
+        <!-- Live Performance Summary -->
+        {% if portfolio.live_perf %}
+        <div class="section">
+            <div class="section-title">Live Performance (since March 2026)</div>
+            <table style="font-size:13px;">
+                <thead><tr>
+                    <th>Strategy</th>
+                    <th class="num">Days</th>
+                    <th class="num">Active</th>
+                    <th class="num">Sharpe</th>
+                    <th class="num">PnL</th>
+                    <th class="num">MaxDD</th>
+                    <th class="num">Win</th>
+                </tr></thead>
+                <tbody>
+                {% for p in portfolio.live_perf %}
+                <tr onclick="showStrategy('{{ p.id }}')">
+                    <td><span style="color:{{ p.color }};font-size:8px;">&#9679;</span>&nbsp; {{ p.name }}</td>
+                    <td class="num">{{ p.days }}</td>
+                    <td class="num muted">{{ p.active_days }}</td>
+                    <td class="num {{ 'pos' if p.sharpe > 0 else 'neg' }}">{{ "%.2f"|format(p.sharpe) }}</td>
+                    <td class="num {{ 'pos' if p.pnl > 0 else 'neg' }}">{{ "%+.2f"|format(p.pnl * 100) }}%</td>
+                    <td class="num neg">{% if p.max_dd > 0 %}-{{ "%.1f"|format(p.max_dd * 100) }}%{% else %}0%{% endif %}</td>
+                    <td class="num">{{ "%.0f"|format(p.win_rate * 100) }}%</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
         <!-- Live Ledger: per-strategy daily detail -->
         <div class="section">
             <div class="section-title">Ledger</div>

@@ -306,6 +306,9 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         if len(live) == 0:
             continue
         live["date"] = pd.to_datetime(live["date"])
+        # Recompute cum_pnl from live start (not from backfill)
+        live = live.copy()
+        live["live_cum"] = live["pnl"].cumsum()
         strat_live_rows[s["id"]] = {
             "name": s["name"],
             "color": s["color"],
@@ -329,7 +332,7 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
             row = day_rows.iloc[-1]
             pos = float(row["position"])
             pnl_val = float(row["pnl"])
-            cum = float(row["cum_pnl"])
+            cum = float(row["live_cum"])
             total_pnl_day += pnl_val
 
             # Determine action by comparing with previous day

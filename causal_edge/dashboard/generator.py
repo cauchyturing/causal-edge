@@ -287,6 +287,97 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         stale_hours = 999
         stale_label = "unknown"
 
+    # Ledger: per-strategy daily detail for last 14 live days
+    ledger = []
+    # Collect all live rows per strategy
+    strat_live_rows = {}  # {strat_id: DataFrame}
+    for s in strategies:
+        if not s["has_data"]:
+            continue
+        cfg_match = next(
+            (sc for sc in _strat_cfgs if sc["id"] == s["id"]), None,
+        )
+        if not cfg_match:
+            continue
+        df = _load_trade_log(cfg_match["trade_log"])
+        if df is None or "source" not in df.columns:
+            continue
+        live = df[df["source"] == "live"].copy()
+        if len(live) == 0:
+            continue
+        live["date"] = pd.to_datetime(live["date"])
+        strat_live_rows[s["id"]] = {
+            "name": s["name"],
+            "color": s["color"],
+            "df": live.tail(30),
+        }
+
+    # Build date-grouped ledger
+    all_live_dates = set()
+    for info in strat_live_rows.values():
+        all_live_dates.update(
+            str(d.date()) for d in info["df"]["date"]
+        )
+    for date_str in sorted(all_live_dates, reverse=True)[:14]:
+        entries = []
+        total_pnl_day = 0.0
+        for sid, info in strat_live_rows.items():
+            df = info["df"]
+            day_rows = df[df["date"].dt.strftime("%Y-%m-%d") == date_str]
+            if len(day_rows) == 0:
+                continue
+            row = day_rows.iloc[-1]
+            pos = float(row["position"])
+            pnl_val = float(row["pnl"])
+            cum = float(row["cum_pnl"])
+            total_pnl_day += pnl_val
+
+            # Determine action by comparing with previous day
+            idx = df.index.get_loc(day_rows.index[-1])
+            if idx > 0:
+                prev_pos = float(df.iloc[idx - 1]["position"])
+            else:
+                prev_pos = 0.0
+
+            if abs(pos) < 0.01 and abs(prev_pos) < 0.01:
+                action = "—"
+                action_class = "ledger-action-flat"
+            elif abs(prev_pos) < 0.01 and abs(pos) > 0.01:
+                action = "→ LONG"
+                action_class = "ledger-action-change"
+            elif abs(prev_pos) > 0.01 and abs(pos) < 0.01:
+                action = "→ EXIT"
+                action_class = "ledger-action-change"
+            elif abs(pos - prev_pos) > 0.01:
+                direction = "↑" if pos > prev_pos else "↓"
+                action = f"{direction} {pos:.2f}"
+                action_class = "ledger-action-change"
+            else:
+                action = "= hold"
+                action_class = "ledger-action-long"
+
+            # Skip flat+no-pnl rows to reduce noise
+            if abs(pos) < 0.01 and abs(pnl_val) < 1e-8:
+                continue
+
+            entries.append({
+                "name": info["name"],
+                "color": info["color"],
+                "position": pos,
+                "pnl": pnl_val,
+                "cum_pnl": cum,
+                "action": action,
+                "action_class": action_class,
+            })
+
+        entries.sort(key=lambda x: abs(x["pnl"]), reverse=True)
+        if entries:
+            ledger.append({
+                "date": date_str,
+                "total_pnl": total_pnl_day,
+                "entries": entries,
+            })
+
     return {
         "today_pnl": today_pnl,
         "mtd_pnl": mtd_pnl,
@@ -299,6 +390,7 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         "prices": prices,
         "stale_hours": stale_hours,
         "stale_label": stale_label,
+        "ledger": ledger,
     }
 
 

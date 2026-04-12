@@ -88,8 +88,11 @@ def compute_all_metrics(pnl: np.ndarray, dates: pd.DatetimeIndex,
     sharpe = float(np.mean(pnl) / std * np.sqrt(252)) if std > 0 else 0
     sortino = _sortino(pnl)
     max_dd = float(np.min(dd))
-    calmar = float(cum[-1] / abs(max_dd)) if max_dd != 0 else 999
     total_pnl = float(cum[-1])
+    yrs = T / 252
+    equity_final = np.exp(total_pnl)
+    ann_ret = (equity_final ** (1 / yrs) - 1) if yrs > 0 and equity_final > 0 else 0
+    calmar = float(ann_ret / abs(max_dd)) if max_dd != 0 else 999
 
     # Lo-adjusted Sharpe (serial correlation correction)
     rho = [pd.Series(pnl).autocorr(lag=k) for k in range(1, 11)]
@@ -100,10 +103,21 @@ def compute_all_metrics(pnl: np.ndarray, dates: pd.DatetimeIndex,
     dsr = _dsr(pnl, T, K=K if K is not None else 300)
     pbo, oos_sharpes = _cpcv(pnl, n_groups=16)
 
-    # OOS/IS (mechanical 50/50 split)
-    mid = T // 2
-    is_sh = _sharpe(pnl[:mid])
-    oos_sh = _sharpe(pnl[mid:])
+    # OOS/IS (time-based: train ≤ 2023, test ≥ 2024)
+    if dates is not None and len(dates) == T:
+        train_mask = dates.year <= 2023
+        test_mask = dates.year >= 2024
+        if train_mask.sum() > 50 and test_mask.sum() > 50:
+            is_sh = _sharpe(pnl[train_mask])
+            oos_sh = _sharpe(pnl[test_mask])
+        else:
+            mid = T // 2
+            is_sh = _sharpe(pnl[:mid])
+            oos_sh = _sharpe(pnl[mid:])
+    else:
+        mid = T // 2
+        is_sh = _sharpe(pnl[:mid])
+        oos_sh = _sharpe(pnl[mid:])
     oos_is = oos_sh / is_sh if is_sh != 0 else 0
 
     # Year-by-year stability

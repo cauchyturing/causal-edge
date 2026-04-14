@@ -51,7 +51,14 @@ def _layout(title, height, xaxis_title="", yaxis_title=""):
 
 
 def compute_metrics(pnl: np.ndarray) -> dict:
-    """Standard metrics from PnL array of daily log returns."""
+    """Standard metrics from PnL array of daily log returns.
+
+    `cum_pnl` is returned as the **compounded total return fraction**
+    (`exp(sum(pnl)) - 1`). The trade-log `pnl` column stores log returns
+    (position × log_return), so compounding = exp of the cumulative sum.
+    Using the raw log sum under-reports gains (e.g. log 1.71 ≈ 171%, but
+    compounded = exp(1.71) - 1 ≈ 451%).
+    """
     if len(pnl) == 0:
         return dict(sharpe=0, cum_pnl=0, max_dd=0, win_rate=0,
                     n_trades=0, n_days=0, calmar=0)
@@ -68,13 +75,14 @@ def compute_metrics(pnl: np.ndarray) -> dict:
     yrs = len(pnl) / 252
     ann_ret = (equity[-1] ** (1 / yrs) - 1) if yrs > 0 and equity[-1] > 0 else 0
     calmar = float(ann_ret / max_dd) if max_dd > 0 else 0
-    return dict(sharpe=round(sharpe, 2), cum_pnl=round(float(cum[-1]), 4),
+    compounded = float(equity[-1] - 1) if len(equity) else 0.0
+    return dict(sharpe=round(sharpe, 2), cum_pnl=round(compounded, 4),
                 max_dd=round(max_dd, 4), win_rate=round(win_rate, 3),
                 n_trades=n_trades, n_days=len(pnl), calmar=round(calmar, 1))
 
 
 def yearly_metrics(dates, pnl) -> list[dict]:
-    """Per-year Sharpe + PnL."""
+    """Per-year Sharpe + compounded PnL."""
     df = pd.DataFrame({"date": dates, "pnl": pnl})
     df["year"] = pd.DatetimeIndex(df["date"]).year
     out = []
@@ -82,8 +90,9 @@ def yearly_metrics(dates, pnl) -> list[dict]:
         p = grp["pnl"].values
         std = np.std(p, ddof=1)
         sh = float(np.mean(p) / std * np.sqrt(252)) if std > 0 and len(p) > 20 else 0
+        compounded = float(np.exp(np.sum(p)) - 1)
         out.append({"year": int(yr), "sharpe": round(sh, 2),
-                     "pnl_pct": round(float(np.sum(p)) * 100, 1),
+                     "pnl_pct": round(compounded * 100, 1),
                      "n_days": len(p)})
     return out
 
@@ -100,16 +109,16 @@ def live_metrics(dates, pnl, positions, source, prices=None) -> dict | None:
     m["start"] = str(pd.Timestamp(live_dates[0]).date())
     m["end"] = str(pd.Timestamp(live_dates[-1]).date())
 
-    # Trade ledger
+    # Trade ledger — cum_pct uses compounded equity (exp(log_cum) - 1)
     ledger = []
-    cum = 0.0
+    log_cum = 0.0
     for i in range(len(live_pnl)):
-        cum += live_pnl[i]
+        log_cum += live_pnl[i]
         row = {
             "date": str(pd.Timestamp(live_dates[i]).date()),
             "position": round(float(live_pos[i]), 4),
             "pnl_pct": round(float(live_pnl[i]) * 100, 3),
-            "cum_pct": round(cum * 100, 2),
+            "cum_pct": round((np.exp(log_cum) - 1) * 100, 2),
         }
         if prices is not None:
             live_px = np.array(prices)[mask]
@@ -123,10 +132,12 @@ def live_metrics(dates, pnl, positions, source, prices=None) -> dict | None:
 
 
 def equity_chart(dates, cum_pnl, name: str, color: str) -> str:
-    """Equity curve. Returns JSON string."""
+    """Equity curve. `cum_pnl` is the log-cumulative; plotted as compounded
+    total-return % = (exp(cum_pnl) - 1) * 100."""
     fig = go.Figure()
+    equity_pct = (np.exp(np.array(cum_pnl)) - 1.0) * 100.0
     fig.add_trace(go.Scatter(
-        x=list(dates), y=(np.array(cum_pnl) * 100).tolist(),
+        x=list(dates), y=equity_pct.tolist(),
         mode="lines", name="PnL",
         line=dict(color=color, width=2.5),
         fill="tozeroy", fillcolor=_hex_to_rgba(color, 0.08),

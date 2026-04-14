@@ -34,18 +34,33 @@ class TestT3GlobalStats:
         v = check_static(code)
         assert any("T3" in x for x in v)
 
-    def test_allows_np_std_with_ddof(self):
-        code = "s = np.std(pnl, ddof=1)\nsharpe = mean / s"
+    def test_allows_np_std_on_slice_with_ddof(self):
+        code = "s = np.std(pnl[:i], ddof=1)"
         assert not any("T3" in v for v in check_static(code))
 
     def test_allows_np_std_on_slice(self):
         code = "s = np.std(pnl[:i])"
         assert not any("T3" in v for v in check_static(code))
 
-    def test_allows_in_metrics_context(self):
-        code = "sharpe = np.mean(pnl) / np.std(pnl) * np.sqrt(252)"
-        # This is metrics computation, not feature engineering
+    def test_allows_def_use_slice_var(self):
+        code = "def f(pnl, i):\n    w = pnl[:i]\n    s = np.std(w)"
         assert not any("T3" in v for v in check_static(code))
+
+    def test_allows_list_comprehension(self):
+        code = "m = np.mean([x for x in items if x > 0])"
+        assert not any("T3" in v for v in check_static(code))
+
+    def test_allows_ml_validation_params(self):
+        code = (
+            "def score(x_fit, y_fit, x_val, y_val):\n"
+            "    prob = model.predict(x_val)\n"
+            "    return np.mean((prob - y_val) ** 2)"
+        )
+        assert not any("T3" in v for v in check_static(code))
+
+    def test_flags_unbounded_in_metrics_context(self):
+        code = "def f(pnl):\n    return np.mean(pnl) / np.std(pnl)"
+        assert any("T3" in v for v in check_static(code))
 
 
 class TestT4WFSlicing:

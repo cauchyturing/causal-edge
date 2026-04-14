@@ -72,9 +72,18 @@ def validate_strategy(
         profile_name = profile
     prof = load_profile(profile_name)
 
-    # Runtime look-ahead check
+    # Runtime look-ahead check.
+    # pnl = positions * returns by contract, so we can derive returns for the
+    # R1 correlation test (|position| vs |same-day return|). Without this, R1
+    # is dormant and the only fail condition is R2 hit-rate.
     from causal_edge.validation.look_ahead import check_runtime
-    la_warnings = check_runtime(pnl, positions if positions is not None else np.zeros(len(pnl)))
+    pos_for_check = positions if positions is not None else np.zeros(len(pnl))
+    returns_arr = np.divide(
+        pnl, pos_for_check,
+        out=np.zeros_like(pnl, dtype=float),
+        where=np.abs(pos_for_check) > 0.01,
+    )
+    la_warnings = check_runtime(pnl, pos_for_check, returns_arr)
 
     # Compute all metrics
     metrics = compute_all_metrics(pnl, dates, positions, K=K)

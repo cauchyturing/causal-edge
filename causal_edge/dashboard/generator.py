@@ -182,17 +182,12 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
 
     signals_active.sort(key=lambda x: x["position"], reverse=True)
 
-    # MTD and total PnL (sum across strategies)
+    # MTD and live-total PnL (sum across strategies, live rows only)
     mtd_pnl = 0.0
     total_pnl = 0.0
-    for s in strategies:
-        if not s["has_data"]:
-            continue
-        total_pnl += s["metrics"]["cum_pnl"]
-
-    # Compute MTD from trade logs
     current_month = now.month
     current_year = now.year
+
     for s in strategies:
         if not s["has_data"]:
             continue
@@ -205,50 +200,31 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         )
         if df is not None:
             df["date"] = pd.to_datetime(df["date"])
-            mask = (df["date"].dt.month == current_month) & (
-                df["date"].dt.year == current_year
-            )
-            mtd_pnl += df.loc[mask, "pnl"].sum()
+            # Dedup (strategy, date) — same day can have both backfill and live rows
+            # (Step 6b writes both). Prefer live when both exist.
+            df_u = df.copy()
+            df_u["_date_str"] = df_u["date"].dt.strftime("%Y-%m-%d")
+            if "source" in df_u.columns:
+                df_u["_src_rank"] = df_u["source"].map({"live": 1, "backfill": 0}).fillna(0)
+                df_u = df_u.sort_values(["_date_str", "_src_rank"])
+            df_u = df_u.drop_duplicates(subset=["_date_str"], keep="last")
+            # YTD: current year. Treats backfill as live-equivalent because
+            # pure-function engines would have produced identical signals on
+            # each of those dates (paper trading has been running all along).
+            ytd_mask = df_u["date"].dt.year == current_year
+            total_pnl += df_u.loc[ytd_mask, "pnl"].sum()
+            # MTD: current month, deduped
+            mtd_mask = ytd_mask & (df_u["date"].dt.month == current_month)
+            mtd_pnl += df_u.loc[mtd_mask, "pnl"].sum()
 
-    # Recent days (last 7)
-    recent_days = []
-    all_dates = set()
-    strat_pnl_by_date = {}
-    for s in strategies:
-        if not s["has_data"]:
-            continue
-        df = _load_trade_log(
-            next(
-                (sc["trade_log"] for sc in _strat_cfgs
-                 if sc["id"] == s["id"]),
-                "",
-            )
-        )
-        if df is None:
-            continue
-        for _, row in df.tail(30).iterrows():
-            d = str(pd.Timestamp(row["date"]).date())
-            all_dates.add(d)
-            if d not in strat_pnl_by_date:
-                strat_pnl_by_date[d] = {"pnl": 0.0, "n_active": 0}
-            strat_pnl_by_date[d]["pnl"] += row["pnl"]
-            if abs(row.get("position", 0)) > 0.01:
-                strat_pnl_by_date[d]["n_active"] += 1
-
-    sorted_dates = sorted(all_dates, reverse=True)[:7]
-    pnl_history = []
-    for d in sorted_dates:
-        info = strat_pnl_by_date.get(d, {"pnl": 0, "n_active": 0})
-        pnl_history.append(info["pnl"])
-        recent_days.append({
-            "date": d[5:],  # MM-DD
-            "pnl": info["pnl"],
-            "n_active": info["n_active"],
-            "spark": "",
-        })
+    # Recent days + ledger: both dedup (strategy, date). Extracted to portfolio.py
+    # so this file stays under the 400-line structural limit.
+    from causal_edge.dashboard.portfolio import build_recent_days
+    recent_days, pnl_history = build_recent_days(
+        strategies, _strat_cfgs, _load_trade_log,
+    )
     if recent_days:
-        spark = _sparkline(list(reversed(pnl_history)))
-        recent_days[0]["spark"] = spark
+        recent_days[0]["spark"] = _sparkline(list(reversed(pnl_history)))
 
     # Asset prices (latest from trade logs)
     prices = {}
@@ -327,99 +303,13 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         })
     live_perf.sort(key=lambda x: x["sharpe"], reverse=True)
 
-    # Ledger: per-strategy daily detail for last 14 live days
-    ledger = []
-    # Collect all live rows per strategy
-    strat_live_rows = {}  # {strat_id: DataFrame}
-    for s in strategies:
-        if not s["has_data"]:
-            continue
-        cfg_match = next(
-            (sc for sc in _strat_cfgs if sc["id"] == s["id"]), None,
-        )
-        if not cfg_match:
-            continue
-        df = _load_trade_log(cfg_match["trade_log"])
-        if df is None or "source" not in df.columns:
-            continue
-        live = df[df["source"] == "live"].copy()
-        if len(live) == 0:
-            continue
-        live["date"] = pd.to_datetime(live["date"])
-        # Recompute cum_pnl from live start (not from backfill)
-        live = live.copy()
-        live["live_cum"] = live["pnl"].cumsum()
-        strat_live_rows[s["id"]] = {
-            "name": s["name"],
-            "color": s["color"],
-            "df": live.tail(30),
-        }
-
-    # Build date-grouped ledger
-    all_live_dates = set()
-    for info in strat_live_rows.values():
-        all_live_dates.update(
-            str(d.date()) for d in info["df"]["date"]
-        )
-    for date_str in sorted(all_live_dates, reverse=True)[:14]:
-        entries = []
-        total_pnl_day = 0.0
-        for sid, info in strat_live_rows.items():
-            df = info["df"]
-            day_rows = df[df["date"].dt.strftime("%Y-%m-%d") == date_str]
-            if len(day_rows) == 0:
-                continue
-            row = day_rows.iloc[-1]
-            pos = float(row["position"])
-            pnl_val = float(row["pnl"])
-            cum = float(row["live_cum"])
-            total_pnl_day += pnl_val
-
-            # Determine action by comparing with previous day
-            idx = df.index.get_loc(day_rows.index[-1])
-            if idx > 0:
-                prev_pos = float(df.iloc[idx - 1]["position"])
-            else:
-                prev_pos = 0.0
-
-            if abs(pos) < 0.01 and abs(prev_pos) < 0.01:
-                action = "—"
-                action_class = "ledger-action-flat"
-            elif abs(prev_pos) < 0.01 and abs(pos) > 0.01:
-                action = "→ LONG"
-                action_class = "ledger-action-change"
-            elif abs(prev_pos) > 0.01 and abs(pos) < 0.01:
-                action = "→ EXIT"
-                action_class = "ledger-action-change"
-            elif abs(pos - prev_pos) > 0.01:
-                direction = "↑" if pos > prev_pos else "↓"
-                action = f"{direction} {pos:.2f}"
-                action_class = "ledger-action-change"
-            else:
-                action = "= hold"
-                action_class = "ledger-action-long"
-
-            # Skip flat+no-pnl rows to reduce noise
-            if abs(pos) < 0.01 and abs(pnl_val) < 1e-8:
-                continue
-
-            entries.append({
-                "name": info["name"],
-                "color": info["color"],
-                "position": pos,
-                "pnl": pnl_val,
-                "cum_pnl": cum,
-                "action": action,
-                "action_class": action_class,
-            })
-
-        entries.sort(key=lambda x: abs(x["pnl"]), reverse=True)
-        if entries:
-            ledger.append({
-                "date": date_str,
-                "total_pnl": total_pnl_day,
-                "entries": entries,
-            })
+    from causal_edge.dashboard.portfolio import build_ledger
+    since = settings.get("paper_trading_start")  # e.g. "2026-03-01"
+    ledger_days = int(settings.get("ledger_days", 30))
+    ledger = build_ledger(
+        strategies, _strat_cfgs, _load_trade_log,
+        since_date=since, n_days=ledger_days,
+    )
 
     return {
         "today_pnl": today_pnl,

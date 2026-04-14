@@ -1,5 +1,5 @@
 # causal_edge/harness/lifecycle.py
-"""8-step signal lifecycle for strategy execution.
+"""9-step signal lifecycle for strategy execution.
 
 CC Pattern: Seven-Step Tool Lifecycle (03§3).
 CC Pattern: Fail-Fast for Safety, Fail-Open for UX (08§2).
@@ -10,7 +10,8 @@ Steps:
   3. Compute signals (engine.compute_signals())
   4. Pre-write hooks (extension point — users can add overlays)
   5. PnL computation (positions * returns)
-  6. Write trade log (atomic write)
+  6. Write trade log (atomic write of full backfill history)
+  6b. Append live row (timestamped, immutable audit record for the last date)
   7. Validate (fail-open — log verdict, don't block write)
   8. Post-write hooks (extension point — notifications, ledger)
 
@@ -105,6 +106,16 @@ def execute_strategy(strategy_cfg: dict) -> SignalResult:
         return SignalResult(sid, "error", error=f"Write failed: {e}",
                            lifecycle_log=tuple(log),
                            duration_ms=_elapsed_ms(t0))
+
+    # Step 6b: Append timestamped live row for audit trail (immutable paper-trade record)
+    # Fail-open — missing live row doesn't invalidate the backfill write above.
+    if len(dates) > 0:
+        try:
+            from causal_edge.engine.ledger import append_live_row
+            append_live_row(dates[-1], float(positions[-1]), float(pnl[-1]), trade_log_path)
+            log.append("live:ok")
+        except Exception as e:
+            log.append(f"live:warn:{e}")
 
     # Step 7: Validate (fail-open — log result but don't block)
     try:

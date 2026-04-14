@@ -168,8 +168,8 @@
                     <div class="lbl">today</div>
                 </div>
                 <div class="hero-stat">
-                    <div class="val {{ 'pos' if portfolio.total_pnl >= 0 else 'neg' }}">{{ "%+.1f"|format(portfolio.total_pnl * 100) }}%</div>
-                    <div class="lbl">total</div>
+                    <div class="val {{ 'pos' if portfolio.total_pnl >= 0 else 'neg' }}">{{ "%+.2f"|format(portfolio.total_pnl * 100) }}%</div>
+                    <div class="lbl">YTD</div>
                 </div>
                 <div class="hero-stat">
                     <div class="val">{{ portfolio.n_active }}/{{ portfolio.n_strats }}</div>

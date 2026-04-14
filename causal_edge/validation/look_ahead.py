@@ -16,11 +16,23 @@ Runtime catches data-level leaks that static analysis misses.
 """
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from causal_edge.validation._look_ahead_ast import (
+    collect_scope_bindings,
+    in_string_literal,
+    is_bounded_expr,
+    is_numpy_reduction,
+    node_offset,
+    numpy_call_name,
+    safe_unparse,
+    string_literal_spans,
+)
 
 
 # ── Static Analysis ──
@@ -34,18 +46,57 @@ def check_static(source: str) -> list[str]:
 
     Returns:
         List of violation messages. Empty = clean.
+
+    Suppression: add `# noqa: T2` (or T3/T4/T5, or bare `# noqa`) to a line to
+    silence a false positive. Use `# noqa: lookahead` to silence all look-ahead
+    codes on that line. Scanners are regex-based and flag legitimate patterns
+    like `[ws:i]` windowed slices or cross-axis mean across strategies —
+    those are textual false positives, not real leaks. Always pair a noqa
+    with a reason comment on the same or previous line.
     """
-    violations = []
-    violations.extend(_t2_rolling_without_shift(source))
-    violations.extend(_t3_global_stats(source))
-    violations.extend(_t4_wf_slicing(source))
-    violations.extend(_t5_trend_filter(source))
-    return violations
+    lines = source.split("\n")
+    raw = []
+    raw.extend(_t2_rolling_without_shift(source))
+    raw.extend(_t3_global_stats(source))
+    raw.extend(_t4_wf_slicing(source))
+    raw.extend(_t5_trend_filter(source))
+    return [v for v in raw if not _is_suppressed(v, lines)]
 
 
 def check_static_file(path: str | Path) -> list[str]:
     """Run static checks on a file path."""
     return check_static(Path(path).read_text())
+
+
+def _is_suppressed(violation: str, lines: list[str]) -> bool:
+    """Return True if the line referenced by the violation carries a matching
+    # noqa annotation. Supported forms on the flagged line or the line above:
+      # noqa                — suppresses any code
+      # noqa: T2            — suppresses only T2
+      # noqa: T2, T3        — suppresses listed codes
+      # noqa: lookahead     — suppresses all look-ahead codes (T1-T5, R1-R2)
+    """
+    m = re.match(r"^(T[1-5])\s+L(\d+):", violation)
+    if not m:
+        return False
+    code, line_num = m.group(1), int(m.group(2))
+    # Check the flagged line and the line above (for multi-line expressions)
+    candidates = []
+    if 0 <= line_num - 1 < len(lines):
+        candidates.append(lines[line_num - 1])
+    if 0 <= line_num - 2 < len(lines):
+        candidates.append(lines[line_num - 2])
+    for ln in candidates:
+        noqa = re.search(r"#\s*noqa(?::\s*([A-Za-z0-9_,\s]+))?", ln)
+        if not noqa:
+            continue
+        arg = noqa.group(1)
+        if arg is None:  # bare `# noqa` suppresses any
+            return True
+        tokens = {t.strip().lower() for t in arg.split(",")}
+        if code.lower() in tokens or "lookahead" in tokens:
+            return True
+    return False
 
 
 def _t2_rolling_without_shift(source: str) -> list[str]:
@@ -55,11 +106,14 @@ def _t2_rolling_without_shift(source: str) -> list[str]:
     Must shift before using for decisions.
     """
     violations = []
+    string_spans = string_literal_spans(source)
     # Match rolling(N).stat() — various stat methods
     pattern = re.compile(
         r'\.rolling\(\s*\d+\s*\)\s*\.\s*(mean|std|sum|var|median|corr|min|max)\s*\([^)]*\)'
     )
     for m in pattern.finditer(source):
+        if in_string_literal(m.start(), string_spans):
+            continue  # skip matches inside docstrings/string literals
         line_num = source[:m.start()].count('\n') + 1
         # Check if .shift() follows within 50 chars
         after = source[m.end():m.end() + 50]
@@ -79,27 +133,46 @@ def _t2_rolling_without_shift(source: str) -> list[str]:
 
 
 def _t3_global_stats(source: str) -> list[str]:
-    """T3: np.std/np.mean on full array = look-ahead.
+    """T3: np.std/np.mean/np.var on an unbounded array = look-ahead.
 
-    Use rolling/expanding std, or compute on [:i] slice only.
+    AST-based def-use analysis: for each `np.std(X)` call, trace X back to
+    its binding. If X was assigned from a slice (`a[l:h]`), a list literal
+    (`[...]`), an np.where with a sliced operand, or any expression
+    containing a slice, it is considered "bounded" (window-local) and safe.
+
+    Falls back to clean regex heuristics for cases where AST parsing fails
+    or def-use is ambiguous (e.g. variable from function parameter).
     """
-    violations = []
-    for func in ('np.std', 'np.mean'):
-        for m in re.finditer(re.escape(func) + r'\s*\(\s*(\w+)\s*[,)]', source):
-            line_num = source[:m.start()].count('\n') + 1
-            var_name = m.group(1)
-            # Allow if it's on a slice [:i] or [:n] or [start:end]
-            full_call = source[m.start():m.end() + 30]
-            if '[:' in full_call or 'ddof' in full_call:
-                continue
-            # Allow if in a metrics/reporting context
-            line_start = source.rfind('\n', 0, m.start()) + 1
-            line = source[line_start:source.find('\n', m.end())]
-            if any(kw in line.lower() for kw in ('sharpe', 'metric', 'result', 'report', 'print')):
-                continue
-            violations.append(
-                f"T3 L{line_num}: {func}({var_name}) on full array — use rolling/expanding or [:i] slice"
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    violations: list[str] = []
+    string_spans = string_literal_spans(source)
+    scope_cache: dict[int, dict] = {}
+
+    def _scan(node: ast.AST, scope: ast.AST) -> None:
+        if isinstance(node, ast.Call) and is_numpy_reduction(node) and node.args:
+            offset = node_offset(node, source)
+            if offset is None or not in_string_literal(offset, string_spans):
+                sid = id(scope)
+                if sid not in scope_cache:
+                    scope_cache[sid] = collect_scope_bindings(scope)
+                if not is_bounded_expr(node.args[0], scope_cache[sid]):
+                    violations.append(
+                        f"T3 L{node.lineno}: "
+                        f"np.{numpy_call_name(node)}({safe_unparse(node.args[0])}) "
+                        f"on full array — use rolling/expanding or [:i] slice"
+                    )
+        for child in ast.iter_child_nodes(node):
+            new_scope = (
+                child if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                else scope
             )
+            _scan(child, new_scope)
+
+    _scan(tree, tree)
     return violations
 
 

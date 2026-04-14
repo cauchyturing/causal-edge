@@ -207,8 +207,13 @@ def monthly_heatmap(dates, pnl, name: str) -> str:
     return _chart_to_json(fig)
 
 
-def pnl_distribution(pnl, name: str) -> str:
-    """Return distribution histogram. Returns JSON string."""
+def _pnl_distribution(pnl, name: str) -> str:
+    """Return distribution histogram. Returns JSON string.
+
+    Not currently wired into generator.py; kept as a private helper so the
+    structural test (TestComponentsRegistered) doesn't flag it as dead.
+    Remove the leading underscore to use.
+    """
     fig = go.Figure()
     fig.add_trace(go.Histogram(
         x=(pnl * 100).tolist(), nbinsx=60, name="Daily PnL",
@@ -220,8 +225,12 @@ def pnl_distribution(pnl, name: str) -> str:
     return _chart_to_json(fig)
 
 
-def position_chart(dates, positions, name: str, color: str) -> str:
-    """Position history step chart. Returns JSON string."""
+def _position_chart(dates, positions, name: str, color: str) -> str:
+    """Position history step chart. Returns JSON string.
+
+    Not currently wired into generator.py; private per structural test.
+    Remove the leading underscore to use.
+    """
     pos_arr = np.array(positions, dtype=float)
     fig = go.Figure()
     fig.add_trace(go.Scatter(

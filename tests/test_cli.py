@@ -19,7 +19,11 @@ def test_version():
 
 def test_status_empty():
     """Status with empty strategies.yaml should show 0 strategies."""
-    result = CliRunner().invoke(main, ["status", "--config", "strategies.yaml"])
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        from pathlib import Path
+        Path("strategies.yaml").write_text("settings: {}\nstrategies: []\n")
+        result = runner.invoke(main, ["status", "--config", "strategies.yaml"])
     assert result.exit_code == 0
     assert "Strategies: 0" in result.output
 
@@ -54,7 +58,11 @@ def test_init_fails_if_dir_exists(tmp_path):
 
 def test_run_empty():
     """Run with no strategies should print message, not crash."""
-    result = CliRunner().invoke(main, ["run", "--config", "strategies.yaml"])
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        from pathlib import Path
+        Path("strategies.yaml").write_text("settings: {}\nstrategies: []\n")
+        result = runner.invoke(main, ["run", "--config", "strategies.yaml"])
     assert result.exit_code == 0
     assert "No strategies" in result.output
 
@@ -73,6 +81,10 @@ def test_dashboard_empty():
 
 def test_validate_empty():
     """Validate with no strategies should print message, not crash."""
-    result = CliRunner().invoke(main, ["validate", "--config", "strategies.yaml"])
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        from pathlib import Path
+        Path("strategies.yaml").write_text("settings: {}\nstrategies: []\n")
+        result = runner.invoke(main, ["validate", "--config", "strategies.yaml"])
     assert result.exit_code == 0
     assert "No strategies" in result.output

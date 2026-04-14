@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Generator
 
 from causal_edge.harness.lifecycle import execute_strategy
@@ -90,27 +89,21 @@ def run_pipeline(config: dict) -> Generator[PipelineEvent, None, None]:
 
 
 def _run_strategies(strategies: list[dict]) -> list[SignalResult]:
-    """Execute strategies in parallel via ThreadPoolExecutor."""
+    """Execute strategies sequentially.
+
+    Serial by design: engines use ProcessPoolExecutor + joblib internally, and
+    fork() from a multi-threaded parent deadlocks on CPython. Each strategy
+    runs in turn with full access to all CPU cores.
+    """
     results = []
-
-    if not strategies:
-        return results
-
-    max_workers = min(len(strategies), 8)
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {
-            pool.submit(execute_strategy, s): s for s in strategies
-        }
-        for future in as_completed(futures):
-            s_cfg = futures[future]
-            try:
-                results.append(future.result())
-            except Exception as e:
-                results.append(SignalResult(
-                    strategy_id=s_cfg["id"],
-                    status="error",
-                    error=str(e),
-                    lifecycle_log=("thread:FAIL",),
-                ))
-
+    for s_cfg in strategies:
+        try:
+            results.append(execute_strategy(s_cfg))
+        except Exception as e:
+            results.append(SignalResult(
+                strategy_id=s_cfg["id"],
+                status="error",
+                error=str(e),
+                lifecycle_log=("serial:FAIL",),
+            ))
     return results

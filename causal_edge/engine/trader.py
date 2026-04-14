@@ -7,7 +7,7 @@ import importlib
 import click
 import numpy as np
 
-from causal_edge.engine.ledger import write_trade_log
+from causal_edge.engine.ledger import write_trade_log, append_live_row
 
 
 def _load_engine(engine_path: str):
@@ -32,11 +32,12 @@ def _load_engine(engine_path: str):
 def run_one(strategy_cfg: dict) -> dict:
     """Run a single strategy and write its trade log.
 
-    Args:
-        strategy_cfg: Strategy dict from strategies.yaml
+    Two modes:
+    1. Backfill: rewrite entire trade log (for initial setup)
+    2. Live append: compute signals, append ONLY the latest day with timestamp
 
-    Returns:
-        dict with keys: id, n_days, trade_log
+    In production (cron), this always appends the latest day as a live record.
+    Historical rows are preserved — live rows with timestamps are immutable.
     """
     sid = strategy_cfg["id"]
     engine_path = strategy_cfg["engine"]
@@ -50,26 +51,26 @@ def run_one(strategy_cfg: dict) -> dict:
 
     # PnL: positions[t] * returns[t] is correct because the engine contract
     # requires positions[t] to be decided using data through t-1 only.
-    # The engine is responsible for applying shift(1) to indicators.
     pnl = positions * returns
-    # First day has no prior position signal
     pnl[0] = 0.0
 
+    # Write full backfill (preserves existing timestamped live rows)
     write_trade_log(dates, pnl, positions, trade_log_path)
+
+    # Append latest day as timestamped live record (immutable)
+    if len(dates) > 0:
+        append_live_row(
+            date=dates[-1],
+            position=float(positions[-1]),
+            pnl=float(pnl[-1]),
+            path=trade_log_path,
+        )
 
     return {"id": sid, "n_days": len(dates), "trade_log": trade_log_path}
 
 
 def run_all(config: dict, strategy_id: str | None = None) -> list[dict]:
-    """Run all strategies (or one specific strategy) from config.
-
-    Args:
-        config: Loaded config dict from load_config()
-        strategy_id: If set, run only this strategy
-
-    Returns:
-        List of result dicts from run_one()
-    """
+    """Run all strategies (or one specific strategy) from config."""
     strategies = config["strategies"]
     if strategy_id:
         strategies = [s for s in strategies if s["id"] == strategy_id]
